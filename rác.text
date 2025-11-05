@@ -1,0 +1,141 @@
+import { useState } from "react";
+import Header from "./components/Header";
+import Footer from "./components/Footer";
+
+// Import các trang riêng
+import Home from "./pages/Home";
+import Tasks from "./pages/Tasks";
+import Friends from "./pages/Friends";
+import Wallet from "./pages/Wallet";
+
+export default function App() {
+  const [balance, setBalance] = useState(0);       // số MP đang có (hiện trong header)
+  const [currentMP, setCurrentMP] = useState(0);   // số MP hiện tại user đã farm được (dùng cho tasks)
+  const [activeTab, setActiveTab] = useState("home"); // tab đang mở
+
+  // --- LIFTED: tasks state ở App để giữ trạng thái khi đổi page (Home <-> Tasks) ---
+  const [tasks, setTasks] = useState(() => {
+    const base = [
+      {
+        id: "follow-x",
+        title: "Theo dõi MoonNova trên X",
+        reward: 2000,
+        iconType: "x",
+        completed: false,
+        category: "standard",
+        link: "https://x.com/MoonChainn?t=KXLQTp9k3bA-TG9UGrUp8Q&s=09",
+      },
+      {
+        id: "join-telegram",
+        title: "Tham gia kênh Telegram MoonNova",
+        reward: 2000,
+        iconType: "send",
+        completed: false,
+        category: "standard",
+        link: "https://t.me/MoonNovadefi",
+      },
+      {
+        id: "join-discussion",
+        title: "Tham gia nhóm chat cộng đồng",
+        reward: 2500,
+        iconType: "message",
+        completed: false,
+        category: "standard",
+        link: "https://t.me/MoonTokenCommunity",
+      },
+      {
+        id: "share-x",
+        title: "Chia sẻ lại bài viết trên X",
+        reward: 10000,
+        iconType: "x",
+        completed: false,
+        category: "special",
+      },
+      {
+        id: "daily-5000",
+        title: "Đạt 5000 MP trong ngày",
+        reward: 2000,
+        iconType: "calendar",
+        completed: false,
+        category: "daily",
+      },
+      {
+        id: "weekly-20000",
+        title: "Đạt 20000 MP trong tuần",
+        reward: 5000,
+        iconType: "clock",
+        completed: false,
+        category: "weekly",
+      },
+    ];
+
+    const milestones = Array.from({ length: 20 }, (_, i) => {
+      const mp = (i + 1) * 5000;
+      return {
+        id: `milestone-${mp}`,
+        title: `Đạt ${mp.toLocaleString()} MP`,
+        reward: 2000,
+        iconType: "trophy",
+        completed: false,
+        category: "milestone",
+      };
+    });
+
+    return [...base, ...milestones];
+  });
+
+  const renderPage = () => {
+    switch (activeTab) {
+      case "home":
+        return (
+          <Home
+            balance={balance}
+            setBalance={setBalance}
+            currentMP={currentMP}
+            setCurrentMP={setCurrentMP}
+          />
+        );
+      case "tasks":
+        return (
+          <Tasks
+            balance={balance}
+            setBalance={setBalance}
+            tasks={tasks}
+            setTasks={setTasks}
+          />
+        );
+      case "friends":
+        return (
+          <Friends
+            balance={balance}
+            setBalance={setBalance}
+            inviteCode="hkc1"
+          />
+        );
+      case "wallet":
+        return (
+          <Wallet
+            balance={balance}
+            setBalance={setBalance} // ✅ thêm props để Wallet đồng bộ với App/Home
+          />
+        );
+      default:
+        return (
+          <Home
+            balance={balance}
+            setBalance={setBalance}
+            currentMP={currentMP}
+            setCurrentMP={setCurrentMP}
+          />
+        );
+    }
+  };
+
+  return (
+    <div className="relative min-h-screen bg-black text-white font-sans overflow-hidden">
+      {activeTab === "home" && <Header balance={balance} />}
+      <div className="pb-20">{renderPage()}</div>
+      <Footer activeTab={activeTab} setActiveTab={setActiveTab} />
+    </div>
+  );
+}
