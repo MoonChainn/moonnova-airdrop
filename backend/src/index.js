@@ -63,13 +63,12 @@ app.get("/api/health", (req, res) => {
 });
 
 // ---------------------------------------------
-// 🌐 Serve frontend build (dist nằm trong thư mục frontend)
+// 🌐 Serve frontend build (dist nằm trong backend/src/dist)
 // ---------------------------------------------
-const frontendPath = path.join(__dirname, "../frontend/dist");
-app.use(express.static(frontendPath));
+app.use(express.static(path.join(__dirname, "./dist")));
 
 app.get("*", (req, res) => {
-  res.sendFile(path.join(frontendPath, "index.html"));
+  res.sendFile(path.join(__dirname, "./dist", "index.html"));
 });
 
 // ---------------------------------------------
