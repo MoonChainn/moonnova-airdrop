@@ -6,7 +6,7 @@ import { TonConnectUIProvider } from "@tonconnect/ui-react";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <TonConnectUIProvider manifestUrl="https://yourdomain.com/tonconnect-manifest.json">
+    <TonConnectUIProvider manifestUrl="https://moonnova-airdrop.onrender.com/tonconnect-manifest.json">
       <App />
     </TonConnectUIProvider>
   </React.StrictMode>
