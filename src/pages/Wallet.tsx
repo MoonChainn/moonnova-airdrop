@@ -12,9 +12,8 @@ interface WalletProps {
 export default function Wallet({ balance, setBalance, walletAddress, setWalletAddress }: WalletProps) {
   const wallet = useTonWallet();
   const tonConnectUI = new TonConnectUI({
-    manifestUrl: "https://yourdomain.com/tonconnect-manifest.json",
-  });
-
+  manifestUrl: "https://moonnova-airdrop.onrender.com/tonconnect-manifest.json",
+});
   const [connecting, setConnecting] = useState(false);
   const [loadingBalance, setLoadingBalance] = useState(false);
 
@@ -60,7 +59,7 @@ export default function Wallet({ balance, setBalance, walletAddress, setWalletAd
   const fetchBalance = async (walletAddr: string) => {
     try {
       setLoadingBalance(true);
-      const res = await fetch(`http://localhost:5000/api/user/balance?wallet=${walletAddr}`);
+      const res = await fetch(`https://moonnova-airdrop.onrender.com/api/user/balance?wallet=${walletAddr}`);
       if (!res.ok) throw new Error(`Status ${res.status}`);
       const data = await res.json();
       setBalance(data.balance || 0);
