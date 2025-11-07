@@ -1,12 +1,11 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import path from 'path'
 
 export default defineConfig({
   plugins: [react()],
   base: './',
   build: {
-    outDir: '../backend/src/dist', // build vào đúng chỗ backend đang serve
+    outDir: 'dist', // build ngay trong thư mục frontend
     emptyOutDir: true,
   },
 })
