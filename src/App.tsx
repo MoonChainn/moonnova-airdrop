@@ -40,7 +40,7 @@ export default function App() {
   const fetchInviteCode = async (wallet: string) => {
     try {
       // ✅ Đổi sang backend thật
-      const res = await fetch(`http://localhost:5000/api/referral/code?wallet=${encodeURIComponent(wallet)}`);
+      const res = await fetch(`https://moonnova-airdrop.onrender.com/api/referral/code?wallet=${encodeURIComponent(wallet)}`);
       const data = await res.json();
       setInviteCode(data.code ?? "Initializing...");
     } catch (err) {
