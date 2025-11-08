@@ -67,6 +67,14 @@ app.get("/api/health", (req, res) => {
 // ---------------------------------------------
 app.use(express.static(path.join(__dirname, "./dist")));
 
+// 🟢 Route riêng cho TonConnect manifest
+app.get('/tonconnect-manifest.json', (req, res) => {
+  res.sendFile(path.join(__dirname, "dist", "tonconnect-manifest.json"), {
+    headers: { 'Content-Type': 'application/json' }
+  });
+});
+
+// Fallback SPA
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "./dist", "index.html"));
 });
