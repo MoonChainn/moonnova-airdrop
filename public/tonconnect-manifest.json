@@ -1,8 +1,7 @@
 {
   "name": "MoonNova",
   "description": "MoonNova Airdrop App",
-  "url": "https://moonnova-airdrop.onrender.com",
-  "iconUrl": "https://moonnova-airdrop.onrender.com/icon.png",
+  "appUrl": "https://moonnova-airdrop.onrender.com",
+  "icons": ["https://moonnova-airdrop.onrender.com/icon.png"],
   "themeColor": "#000000"
 }
-
