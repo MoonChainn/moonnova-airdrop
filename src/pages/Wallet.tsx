@@ -1,5 +1,5 @@
 // src/pages/Wallet.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { TonConnectUI, useTonWallet } from "@tonconnect/ui-react";
 
 interface WalletProps {
@@ -11,9 +11,16 @@ interface WalletProps {
 
 export default function Wallet({ balance, setBalance, walletAddress, setWalletAddress }: WalletProps) {
   const wallet = useTonWallet();
-  const tonConnectUI = new TonConnectUI({
-  manifestUrl: "https://moonnova-airdrop.onrender.com/tonconnect-manifest.json",
-});
+
+  // 🌟 Fix TonConnectUI chỉ khởi tạo 1 lần duy nhất
+  const tonConnectUIRef = useRef<TonConnectUI | null>(null);
+  if (!tonConnectUIRef.current) {
+    tonConnectUIRef.current = new TonConnectUI({
+      manifestUrl: "https://moonnova-airdrop.onrender.com/tonconnect-manifest.json",
+    });
+  }
+  const tonConnectUI = tonConnectUIRef.current;
+
   const [connecting, setConnecting] = useState(false);
   const [loadingBalance, setLoadingBalance] = useState(false);
 
