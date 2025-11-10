@@ -1,3 +1,4 @@
+// src/App.tsx
 import { useState, useEffect } from "react";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
@@ -7,13 +8,18 @@ import Friends from "./pages/Friends";
 import Wallet from "./pages/Wallet";
 
 export default function App() {
+  // ✅ Khởi tạo state từ localStorage nếu có, giữ nguyên logic
   const [balance, setBalance] = useState(() => {
-    const saved = localStorage.getItem("currentMP");
-    return saved ? parseInt(saved) : 0;
+    const saved = localStorage.getItem("user_balance");
+    return saved ? Number(saved) : 0;
   });
-  const [currentMP, setCurrentMP] = useState(balance);
-  const [activeTab, setActiveTab] = useState<"home" | "tasks" | "friends" | "wallet">("home");
 
+  const [currentMP, setCurrentMP] = useState(() => {
+    const saved = localStorage.getItem("user_currentMP");
+    return saved ? Number(saved) : 0;
+  });
+
+  const [activeTab, setActiveTab] = useState<"home" | "tasks" | "friends" | "wallet">("home");
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [inviteCode, setInviteCode] = useState<string>("");
 
@@ -35,6 +41,12 @@ export default function App() {
     return [...base, ...milestones];
   });
 
+  // ✅ Lưu balance và currentMP mỗi khi thay đổi
+  useEffect(() => {
+    localStorage.setItem("user_balance", String(balance));
+    localStorage.setItem("user_currentMP", String(currentMP));
+  }, [balance, currentMP]);
+
   useEffect(() => {
     if (walletAddress) fetchInviteCode(walletAddress);
   }, [walletAddress]);
@@ -55,7 +67,7 @@ export default function App() {
       case "home":
         return <Home balance={balance} setBalance={setBalance} currentMP={currentMP} setCurrentMP={setCurrentMP} />;
       case "tasks":
-        return <Tasks balance={balance} setBalance={(val) => { setBalance(val); setCurrentMP(val); }} tasks={tasks} setTasks={setTasks} />;
+        return <Tasks balance={balance} setBalance={setBalance} tasks={tasks} setTasks={setTasks} />;
       case "friends":
         return <Friends balance={balance} setBalance={setBalance} walletAddress={walletAddress} inviteCode={inviteCode} />;
       case "wallet":

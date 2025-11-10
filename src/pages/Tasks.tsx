@@ -31,52 +31,6 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks }) =
   const [popup, setPopup] = useState<string | null>(null);
   const [claiming, setClaiming] = useState<Record<string, boolean>>({});
 
-  // ✅ Reset hàng ngày/tuần cho daily & weekly tasks
-  useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    const week = getWeekNumber(new Date());
-
-    const savedDaily = JSON.parse(localStorage.getItem("dailyTasksDate") || "{}");
-    const savedWeekly = JSON.parse(localStorage.getItem("weeklyTasksWeek") || "{}");
-
-    setTasks((prev) =>
-      prev.map((t) => {
-        if (t.category === "daily" && savedDaily[t.id] !== today) {
-          savedDaily[t.id] = today;
-          t.completed = false;
-          t.claimable = false;
-        }
-        if (t.category === "weekly" && savedWeekly[t.id] !== week) {
-          savedWeekly[t.id] = week;
-          t.completed = false;
-          t.claimable = false;
-        }
-        return t;
-      })
-    );
-
-    localStorage.setItem("dailyTasksDate", JSON.stringify(savedDaily));
-    localStorage.setItem("weeklyTasksWeek", JSON.stringify(savedWeekly));
-  }, [setTasks]);
-
-  // ✅ Load completed tasks cho các loại chỉ claim 1 lần
-  useEffect(() => {
-    const saved = localStorage.getItem("completedTasks");
-    if (saved) {
-      const completedIds: string[] = JSON.parse(saved);
-      setTasks((prev) =>
-        prev.map((t) => (completedIds.includes(t.id) ? { ...t, completed: true, claimable: false } : t))
-      );
-    }
-  }, [setTasks]);
-
-  const saveCompletedTasks = (updatedTasks: TaskType[]) => {
-    const completedIds = updatedTasks
-      .filter((t) => t.completed && t.category !== "daily" && t.category !== "weekly")
-      .map((t) => t.id);
-    localStorage.setItem("completedTasks", JSON.stringify(completedIds));
-  };
-
   const pixelBox = {
     background: "linear-gradient(180deg, #b26cff 0%, #5032ff 100%)",
     border: "2px solid #000",
@@ -119,8 +73,8 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks }) =
     const task = tasks.find((t) => t.id === id);
     if (!task) return;
 
-    const requiredMP =
-      task.category === "daily" ? 5000
+    // ✅ Check requiredMP dựa trên loại task
+    const requiredMP = task.category === "daily" ? 5000
       : task.category === "weekly" ? 20000
       : task.category === "milestone" ? parseInt(task.id.split("-")[1])
       : 0;
@@ -132,17 +86,17 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks }) =
       return;
     }
 
-    setTasks((prev) => {
-      const updated = prev.map((t) => (t.id === id ? { ...t, completed: true, claimable: false } : t));
-      saveCompletedTasks(updated);
-      return updated;
-    });
-
+    // ✅ Claim task thành công
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, completed: true, claimable: false } : t)));
     const newBalance = balance + task.reward;
     setBalance(newBalance);
-    localStorage.setItem("currentMP", newBalance.toString());
-
+    localStorage.setItem("user_balance", newBalance.toString());
     setPopup(`+${task.reward.toLocaleString()} MP`);
+
+    // ✅ Lưu trạng thái task
+    const updatedTasks = tasks.map(t => t.id === id ? { ...t, completed: true, claimable: false } : t);
+    localStorage.setItem("user_tasks", JSON.stringify(updatedTasks));
+
     setTimeout(() => {
       setPopup(null);
       setClaiming((s) => {
@@ -153,13 +107,13 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks }) =
     }, 2000);
   };
 
+  // ✅ Auto cập nhật claimable dựa trên balance
   useEffect(() => {
     setTasks((prev) =>
       prev.map((task) => {
         if (task.completed) return task;
 
-        const requiredMP =
-          task.category === "daily" ? 5000
+        const requiredMP = task.category === "daily" ? 5000
           : task.category === "weekly" ? 20000
           : task.category === "milestone" ? parseInt(task.id.split("-")[1])
           : 0;
@@ -169,6 +123,12 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks }) =
       })
     );
   }, [balance, setTasks]);
+
+  // ✅ Load task từ localStorage khi App load
+  useEffect(() => {
+    const savedTasks = localStorage.getItem("user_tasks");
+    if (savedTasks) setTasks(JSON.parse(savedTasks));
+  }, [setTasks]);
 
   const renderTasksGroup = (category: TaskType["category"], title?: React.ReactNode) => {
     const filtered = tasks.filter((t) => t.category === category);
@@ -290,12 +250,5 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks }) =
     </div>
   );
 };
-
-// ✅ Helper function để lấy số tuần trong năm
-function getWeekNumber(d: Date) {
-  const onejan = new Date(d.getFullYear(), 0, 1);
-  const millisecsInDay = 86400000;
-  return Math.ceil((((d.getTime() - onejan.getTime()) / millisecsInDay) + onejan.getDay() + 1) / 7);
-}
 
 export default Tasks;
