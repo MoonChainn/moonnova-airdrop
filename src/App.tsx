@@ -1,4 +1,3 @@
-// src/App.tsx
 import { useState, useEffect } from "react";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
@@ -8,8 +7,11 @@ import Friends from "./pages/Friends";
 import Wallet from "./pages/Wallet";
 
 export default function App() {
-  const [balance, setBalance] = useState(0);
-  const [currentMP, setCurrentMP] = useState(0);
+  const [balance, setBalance] = useState(() => {
+    const saved = localStorage.getItem("currentMP");
+    return saved ? parseInt(saved) : 0;
+  });
+  const [currentMP, setCurrentMP] = useState(balance);
   const [activeTab, setActiveTab] = useState<"home" | "tasks" | "friends" | "wallet">("home");
 
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
@@ -39,7 +41,6 @@ export default function App() {
 
   const fetchInviteCode = async (wallet: string) => {
     try {
-      // ✅ Đổi sang backend thật
       const res = await fetch(`https://moonnova-airdrop.onrender.com/api/referral/code?wallet=${encodeURIComponent(wallet)}`);
       const data = await res.json();
       setInviteCode(data.code ?? "Initializing...");
@@ -54,7 +55,7 @@ export default function App() {
       case "home":
         return <Home balance={balance} setBalance={setBalance} currentMP={currentMP} setCurrentMP={setCurrentMP} />;
       case "tasks":
-        return <Tasks balance={balance} setBalance={setBalance} tasks={tasks} setTasks={setTasks} />;
+        return <Tasks balance={balance} setBalance={(val) => { setBalance(val); setCurrentMP(val); }} tasks={tasks} setTasks={setTasks} />;
       case "friends":
         return <Friends balance={balance} setBalance={setBalance} walletAddress={walletAddress} inviteCode={inviteCode} />;
       case "wallet":

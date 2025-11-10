@@ -1,4 +1,3 @@
-// src/pages/Tasks.tsx
 import React, { useState, useEffect } from "react";
 import { Calendar, Clock, Trophy, Send, MessageCircle } from "lucide-react";
 
@@ -28,9 +27,55 @@ interface TasksProps {
   walletAddress?: string | null;
 }
 
-const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks, walletAddress }) => {
+const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks }) => {
   const [popup, setPopup] = useState<string | null>(null);
   const [claiming, setClaiming] = useState<Record<string, boolean>>({});
+
+  // ✅ Reset hàng ngày/tuần cho daily & weekly tasks
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const week = getWeekNumber(new Date());
+
+    const savedDaily = JSON.parse(localStorage.getItem("dailyTasksDate") || "{}");
+    const savedWeekly = JSON.parse(localStorage.getItem("weeklyTasksWeek") || "{}");
+
+    setTasks((prev) =>
+      prev.map((t) => {
+        if (t.category === "daily" && savedDaily[t.id] !== today) {
+          savedDaily[t.id] = today;
+          t.completed = false;
+          t.claimable = false;
+        }
+        if (t.category === "weekly" && savedWeekly[t.id] !== week) {
+          savedWeekly[t.id] = week;
+          t.completed = false;
+          t.claimable = false;
+        }
+        return t;
+      })
+    );
+
+    localStorage.setItem("dailyTasksDate", JSON.stringify(savedDaily));
+    localStorage.setItem("weeklyTasksWeek", JSON.stringify(savedWeekly));
+  }, [setTasks]);
+
+  // ✅ Load completed tasks cho các loại chỉ claim 1 lần
+  useEffect(() => {
+    const saved = localStorage.getItem("completedTasks");
+    if (saved) {
+      const completedIds: string[] = JSON.parse(saved);
+      setTasks((prev) =>
+        prev.map((t) => (completedIds.includes(t.id) ? { ...t, completed: true, claimable: false } : t))
+      );
+    }
+  }, [setTasks]);
+
+  const saveCompletedTasks = (updatedTasks: TaskType[]) => {
+    const completedIds = updatedTasks
+      .filter((t) => t.completed && t.category !== "daily" && t.category !== "weekly")
+      .map((t) => t.id);
+    localStorage.setItem("completedTasks", JSON.stringify(completedIds));
+  };
 
   const pixelBox = {
     background: "linear-gradient(180deg, #b26cff 0%, #5032ff 100%)",
@@ -52,19 +97,13 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks, wal
 
   const renderIcon = (task: TaskType) => {
     switch (task.iconType) {
-      case "send":
-        return <Send className="text-sky-400" size={20} />;
-      case "message":
-        return <MessageCircle className="text-green-400" size={20} />;
-      case "trophy":
-        return <Trophy className="text-purple-400" size={20} />;
-      case "calendar":
-        return <Calendar className="text-yellow-400" size={20} />;
-      case "clock":
-        return <Clock className="text-blue-400" size={20} />;
+      case "send": return <Send className="text-sky-400" size={20} />;
+      case "message": return <MessageCircle className="text-green-400" size={20} />;
+      case "trophy": return <Trophy className="text-purple-400" size={20} />;
+      case "calendar": return <Calendar className="text-yellow-400" size={20} />;
+      case "clock": return <Clock className="text-blue-400" size={20} />;
       case "x":
-      default:
-        return <XIcon className="text-white" />;
+      default: return <XIcon className="text-white" />;
     }
   };
 
@@ -73,55 +112,59 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks, wal
     setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, claimable: true } : t)));
   };
 
-  const handleClaim = async (id: string) => {
-    if (!walletAddress) {
-      setPopup("Connect wallet to claim task.");
-      setTimeout(() => setPopup(null), 2000);
-      return;
-    }
-
+  const handleClaim = (id: string) => {
     if (claiming[id]) return;
     setClaiming((s) => ({ ...s, [id]: true }));
 
-    try {
-      const res = await fetch("http://localhost:5000/api/tasks/claim", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wallet: walletAddress, taskId: id }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, completed: true, claimable: false } : t)));
-        setBalance((prev) => prev + data.reward);
-        setPopup(`+${data.reward.toLocaleString()} MP`);
-      } else {
-        setPopup(data.message || "Failed to claim task.");
-      }
-    } catch (err) {
-      console.error(err);
-      setPopup("Error claiming task.");
-    } finally {
-      setTimeout(() => {
-        setPopup(null);
-        setClaiming((s) => {
-          const copy = { ...s };
-          delete copy[id];
-          return copy;
-        });
-      }, 2000);
+    const task = tasks.find((t) => t.id === id);
+    if (!task) return;
+
+    const requiredMP =
+      task.category === "daily" ? 5000
+      : task.category === "weekly" ? 20000
+      : task.category === "milestone" ? parseInt(task.id.split("-")[1])
+      : 0;
+
+    if (balance < requiredMP) {
+      setPopup(`Not enough MP to claim.`);
+      setTimeout(() => setPopup(null), 1500);
+      setClaiming((s) => ({ ...s, [id]: false }));
+      return;
     }
+
+    setTasks((prev) => {
+      const updated = prev.map((t) => (t.id === id ? { ...t, completed: true, claimable: false } : t));
+      saveCompletedTasks(updated);
+      return updated;
+    });
+
+    const newBalance = balance + task.reward;
+    setBalance(newBalance);
+    localStorage.setItem("currentMP", newBalance.toString());
+
+    setPopup(`+${task.reward.toLocaleString()} MP`);
+    setTimeout(() => {
+      setPopup(null);
+      setClaiming((s) => {
+        const copy = { ...s };
+        delete copy[id];
+        return copy;
+      });
+    }, 2000);
   };
 
   useEffect(() => {
     setTasks((prev) =>
       prev.map((task) => {
         if (task.completed) return task;
-        if (task.category === "daily" && !task.claimable && balance >= 5000) return { ...task, claimable: true };
-        if (task.category === "weekly" && !task.claimable && balance >= 20000) return { ...task, claimable: true };
-        if (task.category === "milestone") {
-          const mp = parseInt(task.id.split("-")[1]);
-          if (!task.claimable && balance >= mp) return { ...task, claimable: true };
-        }
+
+        const requiredMP =
+          task.category === "daily" ? 5000
+          : task.category === "weekly" ? 20000
+          : task.category === "milestone" ? parseInt(task.id.split("-")[1])
+          : 0;
+
+        if (!task.claimable && balance >= requiredMP) return { ...task, claimable: true };
         return task;
       })
     );
@@ -134,9 +177,7 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks, wal
     return (
       <div className="mt-6 px-3">
         {title && (
-          <h2 className="text-white font-bold text-base flex items-center gap-1 mb-2 px-1">
-            {title}
-          </h2>
+          <h2 className="text-white font-bold text-base flex items-center gap-1 mb-2 px-1">{title}</h2>
         )}
         <div
           style={{
@@ -240,44 +281,21 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks, wal
       )}
 
       <div className="flex-1 overflow-y-auto no-scrollbar px-[10px] pb-[100px]">
-        {renderTasksGroup(
-          "standard",
-          <>
-            <span className="text-yellow-400 text-lg">•</span>{" "}
-            <span className="ml-2">Social Tasks</span>
-          </>
-        )}
-        {renderTasksGroup(
-          "special",
-          <>
-            <span className="text-yellow-400 text-lg">•</span>{" "}
-            <span className="ml-2">Special Tasks</span>
-          </>
-        )}
-        {renderTasksGroup(
-          "daily",
-          <>
-            <Calendar className="text-yellow-400" size={18} />{" "}
-            <span className="ml-2">Daily Tasks</span>
-          </>
-        )}
-        {renderTasksGroup(
-          "weekly",
-          <>
-            <Clock className="text-blue-400" size={18} />{" "}
-            <span className="ml-2">Weekly Tasks</span>
-          </>
-        )}
-        {renderTasksGroup(
-          "milestone",
-          <>
-            <Trophy className="text-purple-400" size={18} />{" "}
-            <span className="ml-2">MP Milestones</span>
-          </>
-        )}
+        {renderTasksGroup("standard", <> <span className="text-yellow-400 text-lg">•</span>{" "} <span className="ml-2">Social Tasks</span> </>)}
+        {renderTasksGroup("special", <> <span className="text-yellow-400 text-lg">•</span>{" "} <span className="ml-2">Special Tasks</span> </>)}
+        {renderTasksGroup("daily", <> <Calendar className="text-yellow-400" size={18} />{" "} <span className="ml-2">Daily Tasks</span> </>)}
+        {renderTasksGroup("weekly", <> <Clock className="text-blue-400" size={18} />{" "} <span className="ml-2">Weekly Tasks</span> </>)}
+        {renderTasksGroup("milestone", <> <Trophy className="text-purple-400" size={18} />{" "} <span className="ml-2">MP Milestones</span> </>)}
       </div>
     </div>
   );
 };
+
+// ✅ Helper function để lấy số tuần trong năm
+function getWeekNumber(d: Date) {
+  const onejan = new Date(d.getFullYear(), 0, 1);
+  const millisecsInDay = 86400000;
+  return Math.ceil((((d.getTime() - onejan.getTime()) / millisecsInDay) + onejan.getDay() + 1) / 7);
+}
 
 export default Tasks;
