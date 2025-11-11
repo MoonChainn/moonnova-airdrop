@@ -61,8 +61,16 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks }) =
     }
   };
 
+  // ✅ Handle complete với link trực tiếp cho Social Tasks
   const handleComplete = (task: TaskType) => {
-    if (task.link) window.open(task.link, "_blank");
+    if (task.category === "standard") {
+      if (task.id === "social-x") window.open("https://x.com/MoonChainn?t=vYg24BqgbIBRdXQVRvoQdg&s=09", "_blank");
+      else if (task.id === "social-tele-channel") window.open("https://t.me/MoonNovadefi", "_blank");
+      else if (task.id === "social-community") window.open("https://t.me/MoonTokenCommunity", "_blank");
+    } else if (task.link) {
+      window.open(task.link, "_blank");
+    }
+
     setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, claimable: true } : t)));
   };
 
@@ -73,7 +81,6 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks }) =
     const task = tasks.find((t) => t.id === id);
     if (!task) return;
 
-    // ✅ Check requiredMP dựa trên loại task
     const requiredMP = task.category === "daily" ? 5000
       : task.category === "weekly" ? 20000
       : task.category === "milestone" ? parseInt(task.id.split("-")[1])
@@ -86,14 +93,12 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks }) =
       return;
     }
 
-    // ✅ Claim task thành công
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, completed: true, claimable: false } : t)));
     const newBalance = balance + task.reward;
     setBalance(newBalance);
     localStorage.setItem("user_balance", newBalance.toString());
     setPopup(`+${task.reward.toLocaleString()} MP`);
 
-    // ✅ Lưu trạng thái task
     const updatedTasks = tasks.map(t => t.id === id ? { ...t, completed: true, claimable: false } : t);
     localStorage.setItem("user_tasks", JSON.stringify(updatedTasks));
 
@@ -107,7 +112,6 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks }) =
     }, 2000);
   };
 
-  // ✅ Auto cập nhật claimable dựa trên balance
   useEffect(() => {
     setTasks((prev) =>
       prev.map((task) => {
@@ -124,7 +128,6 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks }) =
     );
   }, [balance, setTasks]);
 
-  // ✅ Load task từ localStorage khi App load
   useEffect(() => {
     const savedTasks = localStorage.getItem("user_tasks");
     if (savedTasks) setTasks(JSON.parse(savedTasks));
