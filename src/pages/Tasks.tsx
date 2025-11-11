@@ -63,19 +63,21 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks }) =
 
   // ✅ Handle complete với Social / Special tasks: Start -> mở link -> bật Claim
   const handleComplete = (task: TaskType) => {
-    if (task.category === "standard") {
-      if (task.id === "social-x") window.open("https://x.com/MoonChainn?t=vYg24BqgbIBRdXQVRvoQdg&s=09", "_blank");
-      else if (task.id === "social-tele-channel") window.open("https://t.me/MoonNovadefi", "_blank");
-      else if (task.id === "social-community") window.open("https://t.me/MoonTokenCommunity", "_blank");
-    } else if (task.link) {
-      window.open(task.link, "_blank");
-    }
+  if (task.link) {
+    window.open(task.link, "_blank");
+  } else if (task.category === "standard") {
+    // các id đặc biệt vẫn mở link riêng
+    if (task.id === "social-x") window.open("https://x.com/MoonChainn?t=vYg24BqgbIBRdXQVRvoQdg&s=09", "_blank");
+    else if (task.id === "social-tele-channel") window.open("https://t.me/MoonNovadefi", "_blank");
+    else if (task.id === "social-community") window.open("https://t.me/MoonTokenCommunity", "_blank");
+  }
 
-    // bật claimable sau khi mở link cho Social/Special tasks
-    if (task.category === "special" || task.category === "standard") {
-      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, claimable: true } : t)));
-    }
-  };
+  // bật claimable cho task cần Start
+  if (task.category === "special" || task.category === "standard") {
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, claimable: true } : t)));
+  }
+};
+
 
   const handleClaim = (id: string) => {
     if (claiming[id]) return;
