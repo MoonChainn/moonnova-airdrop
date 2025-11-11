@@ -61,7 +61,7 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks }) =
     }
   };
 
-  // ✅ Handle complete với link trực tiếp cho Social Tasks
+  // ✅ Handle complete với Social / Special tasks: Start -> mở link -> bật Claim
   const handleComplete = (task: TaskType) => {
     if (task.category === "standard") {
       if (task.id === "social-x") window.open("https://x.com/MoonChainn?t=vYg24BqgbIBRdXQVRvoQdg&s=09", "_blank");
@@ -71,7 +71,10 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks }) =
       window.open(task.link, "_blank");
     }
 
-    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, claimable: true } : t)));
+    // bật claimable sau khi mở link cho Social/Special tasks
+    if (task.category === "special" || task.category === "standard") {
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, claimable: true } : t)));
+    }
   };
 
   const handleClaim = (id: string) => {
@@ -112,17 +115,17 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks }) =
     }, 2000);
   };
 
+  // Auto cập nhật claimable chỉ cho Daily/Weekly/Milestone
   useEffect(() => {
     setTasks((prev) =>
       prev.map((task) => {
         if (task.completed) return task;
-
         const requiredMP = task.category === "daily" ? 5000
           : task.category === "weekly" ? 20000
           : task.category === "milestone" ? parseInt(task.id.split("-")[1])
           : 0;
 
-        if (!task.claimable && balance >= requiredMP) return { ...task, claimable: true };
+        if (!task.claimable && requiredMP > 0 && balance >= requiredMP) return { ...task, claimable: true };
         return task;
       })
     );
@@ -203,14 +206,6 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks }) =
                     transition: "transform 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease",
                     transform: "translateY(0)",
                     animation: task.claimable && !isDone ? "pulse 1.2s infinite" : "none",
-                  }}
-                  onMouseDown={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.transform = "translateY(3px)";
-                    (e.currentTarget as HTMLButtonElement).style.boxShadow = "1px 1px 0 #000";
-                  }}
-                  onMouseUp={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)";
-                    (e.currentTarget as HTMLButtonElement).style.boxShadow = "3px 3px 0 #000";
                   }}
                 >
                   {isDone ? "Done" : isProcessing ? "..." : task.claimable ? "Claim" : "Start"}
