@@ -22,12 +22,14 @@ export interface TaskType {
 interface TasksProps {
   balance: number;
   setBalance: React.Dispatch<React.SetStateAction<number>>;
+  currentMP: number;
+  setCurrentMP: React.Dispatch<React.SetStateAction<number>>;
   tasks: TaskType[];
   setTasks: React.Dispatch<React.SetStateAction<TaskType[]>>;
   walletAddress?: string | null;
 }
 
-const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks }) => {
+const Tasks: React.FC<TasksProps> = ({ balance, setBalance, currentMP, setCurrentMP, tasks, setTasks }) => {
   const [popup, setPopup] = useState<string | null>(null);
   const [claiming, setClaiming] = useState<Record<string, boolean>>({});
 
@@ -61,23 +63,20 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks }) =
     }
   };
 
-  // ✅ Handle complete với Social / Special tasks: Start -> mở link -> bật Claim
   const handleComplete = (task: TaskType) => {
-  if (task.link) {
-    window.open(task.link, "_blank");
-  } else if (task.category === "standard") {
-    // các id đặc biệt vẫn mở link riêng
-    if (task.id === "social-x") window.open("https://x.com/MoonChainn?t=vYg24BqgbIBRdXQVRvoQdg&s=09", "_blank");
-    else if (task.id === "social-tele-channel") window.open("https://t.me/MoonNovadefi", "_blank");
-    else if (task.id === "social-community") window.open("https://t.me/MoonTokenCommunity", "_blank");
-  }
+    if (task.link) window.open(task.link, "_blank");
+    else if (task.category === "standard") {
+      if (task.id === "social-x") window.open("https://x.com/MoonChainn?t=vYg24BqgbIBRdXQVRvoQdg&s=09", "_blank");
+      else if (task.id === "social-tele-channel") window.open("https://t.me/MoonNovadefi", "_blank");
+      else if (task.id === "social-community") window.open("https://t.me/MoonTokenCommunity", "_blank");
+    }
 
-  // bật claimable cho task cần Start
-  if (task.category === "special" || task.category === "standard") {
+    // ✅ Fix: cho phép Start bấm được và chuyển sang claimable ngay
     setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, claimable: true } : t)));
-  }
-};
 
+    setPopup("Task started! Now claim your reward.");
+    setTimeout(() => setPopup(null), 1500);
+  };
 
   const handleClaim = (id: string) => {
     if (claiming[id]) return;
@@ -100,12 +99,15 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks }) =
 
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, completed: true, claimable: false } : t)));
     const newBalance = balance + task.reward;
+
     setBalance(newBalance);
+    setCurrentMP(prev => prev + task.reward);
     localStorage.setItem("user_balance", newBalance.toString());
-    setPopup(`+${task.reward.toLocaleString()} MP`);
 
     const updatedTasks = tasks.map(t => t.id === id ? { ...t, completed: true, claimable: false } : t);
     localStorage.setItem("user_tasks", JSON.stringify(updatedTasks));
+
+    setPopup(`+${task.reward.toLocaleString()} MP`);
 
     setTimeout(() => {
       setPopup(null);
@@ -117,7 +119,6 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks }) =
     }, 2000);
   };
 
-  // Auto cập nhật claimable chỉ cho Daily/Weekly/Milestone
   useEffect(() => {
     setTasks((prev) =>
       prev.map((task) => {
@@ -195,7 +196,7 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, tasks, setTasks }) =
                 </div>
                 <button
                   onClick={() => (task.claimable ? handleClaim(task.id) : handleComplete(task))}
-                  disabled={isDone || isProcessing}
+                  disabled={isDone || isProcessing ? true : false} // ✅ chỉ disable khi done hoặc đang xử lý
                   style={{
                     ...pixelBox,
                     minWidth: "90px",
