@@ -24,6 +24,33 @@ export default function Home({ balance, setBalance, currentMP, setCurrentMP }: H
   const [stats, setStats] = useState<any>(null);
   const [loadingStats, setLoadingStats] = useState(true);
 
+  // 🔹 Load trạng thái từ localStorage khi component mount
+  useEffect(() => {
+    const savedBalance = localStorage.getItem("balance");
+    const savedMP = localStorage.getItem("currentMP");
+    const savedIsFarming = localStorage.getItem("isFarming");
+    const savedTimeLeft = localStorage.getItem("timeLeft");
+
+    if (savedBalance) setBalance(Number(savedBalance));
+    if (savedMP) setCurrentMP(Number(savedMP));
+    if (savedIsFarming) setIsFarming(savedIsFarming === "true");
+    if (savedTimeLeft) setTimeLeft(Number(savedTimeLeft));
+  }, [setBalance, setCurrentMP]);
+
+  // 🔹 Lưu trạng thái vào localStorage mỗi khi thay đổi
+  useEffect(() => {
+    localStorage.setItem("balance", balance.toString());
+    localStorage.setItem("currentMP", currentMP.toString());
+  }, [balance, currentMP]);
+
+  useEffect(() => {
+    localStorage.setItem("isFarming", isFarming.toString());
+  }, [isFarming]);
+
+  useEffect(() => {
+    localStorage.setItem("timeLeft", timeLeft.toString());
+  }, [timeLeft]);
+
   useEffect(() => {
     const fetchStats = async () => {
       try {
@@ -50,9 +77,8 @@ export default function Home({ balance, setBalance, currentMP, setCurrentMP }: H
     setTimeout(() => setIsTapping(false), 200);
     const earned = Math.floor(Math.random() * 5) + 1;
     setBalance(prev => prev + earned);
-    setCurrentMP(prev => prev + earned); // ✅ update MP
+    setCurrentMP(prev => prev + earned);
 
-    // Hiệu ứng floating point
     const angle = Math.random() * 2 * Math.PI;
     const radius = 150 + Math.random() * 50;
     const x = Math.cos(angle) * radius;
@@ -84,7 +110,7 @@ export default function Home({ balance, setBalance, currentMP, setCurrentMP }: H
   const claimReward = () => {
     const reward = 777;
     setBalance(prev => prev + reward);
-    setCurrentMP(prev => prev + reward); // ✅ update MP
+    setCurrentMP(prev => prev + reward);
     setIsFarming(false);
     setTimeLeft(0);
   };
