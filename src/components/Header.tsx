@@ -1,3 +1,4 @@
+// src/components/Header.tsx
 import React from "react";
 
 interface HeaderProps {
@@ -23,18 +24,16 @@ const Header: React.FC<HeaderProps> = ({ balance }) => {
     border: "2px solid #000",
     boxShadow: "3px 3px 0 #000",
     imageRendering: "pixelated" as const,
-    clipPath: `
-      polygon(
-        0px 14px, 4px 14px, 4px 10px, 8px 10px, 8px 6px, 12px 6px, 12px 0px,
-        calc(100% - 12px) 0px, calc(100% - 12px) 6px, calc(100% - 8px) 6px,
-        calc(100% - 8px) 10px, calc(100% - 4px) 10px, calc(100% - 4px) 14px,
-        100% 14px, 100% calc(100% - 14px), calc(100% - 4px) calc(100% - 14px),
-        calc(100% - 4px) calc(100% - 10px), calc(100% - 8px) calc(100% - 10px),
-        calc(100% - 8px) calc(100% - 6px), calc(100% - 12px) calc(100% - 6px),
-        calc(100% - 12px) 100%, 12px 100%, 12px calc(100% - 6px), 8px calc(100% - 6px),
-        8px calc(100% - 10px), 4px calc(100% - 10px), 4px calc(100% - 14px), 0px calc(100% - 14px)
-      )
-    `,
+    clipPath: `polygon(
+      0px 14px, 4px 14px, 4px 10px, 8px 10px, 8px 6px, 12px 6px, 12px 0px,
+      calc(100% - 12px) 0px, calc(100% - 12px) 6px, calc(100% - 8px) 6px,
+      calc(100% - 8px) 10px, calc(100% - 4px) 10px, calc(100% - 4px) 14px,
+      100% 14px, 100% calc(100% - 14px), calc(100% - 4px) calc(100% - 14px),
+      calc(100% - 4px) calc(100% - 10px), calc(100% - 8px) calc(100% - 10px),
+      calc(100% - 8px) calc(100% - 6px), calc(100% - 12px) calc(100% - 6px),
+      calc(100% - 12px) 100%, 12px 100%, 12px calc(100% - 6px), 8px calc(100% - 6px),
+      8px calc(100% - 10px), 4px calc(100% - 10px), 4px calc(100% - 14px), 0px calc(100% - 14px)
+    )`,
   };
 
   return (

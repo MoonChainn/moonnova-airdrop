@@ -1,3 +1,6 @@
+
+
+
 // src/pages/Wallet.tsx
 import React, { useState, useEffect, useRef } from "react";
 import { TonConnectUI, useTonWallet } from "@tonconnect/ui-react";
@@ -44,12 +47,9 @@ export default function Wallet({ balance, setBalance, walletAddress, setWalletAd
 
   const shortenAddress = (address: string) => address.slice(0, 6) + "..." + address.slice(-4);
 
-  // 🌟 Fix handleConnect để reset session trước khi connect
   const handleConnect = async () => {
     try {
       setConnecting(true);
-      // 🔹 reset session cũ
-      await tonConnectUI.disconnect().catch(() => {});
       const w = await tonConnectUI.connectWallet();
       setWalletAddress(w.account.address); // đồng bộ lên App
     } catch (err) {

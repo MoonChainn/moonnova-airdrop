@@ -67,7 +67,8 @@ export default function App() {
       case "home":
         return <Home balance={balance} setBalance={setBalance} currentMP={currentMP} setCurrentMP={setCurrentMP} />;
       case "tasks":
-        return <Tasks balance={balance} setBalance={setBalance} tasks={tasks} setTasks={setTasks} />;
+        // <-- truyền currentMP + setCurrentMP để Tasks có thể cập nhật MP đúng (đã fix)
+        return <Tasks balance={balance} setBalance={setBalance} currentMP={currentMP} setCurrentMP={setCurrentMP} tasks={tasks} setTasks={setTasks} />;
       case "friends":
         return <Friends balance={balance} setBalance={setBalance} walletAddress={walletAddress} inviteCode={inviteCode} />;
       case "wallet":

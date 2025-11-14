@@ -1,3 +1,4 @@
+// src/pages/Home.tsx
 import { useState, useEffect } from "react";
 import { getAdminStats } from "../api";
 
@@ -24,25 +25,17 @@ export default function Home({ balance, setBalance, currentMP, setCurrentMP }: H
   const [stats, setStats] = useState<any>(null);
   const [loadingStats, setLoadingStats] = useState(true);
 
-  // 🔹 Load trạng thái từ localStorage khi component mount
+  // 🔹 CHỈ load trạng thái farming/timeLeft từ localStorage khi component mount
+  // 🔹 Không đọc/ghi balance/currentMP ở đây nữa — App quản lý balance/currentMP (single source of truth)
   useEffect(() => {
-    const savedBalance = localStorage.getItem("balance");
-    const savedMP = localStorage.getItem("currentMP");
     const savedIsFarming = localStorage.getItem("isFarming");
     const savedTimeLeft = localStorage.getItem("timeLeft");
 
-    if (savedBalance) setBalance(Number(savedBalance));
-    if (savedMP) setCurrentMP(Number(savedMP));
     if (savedIsFarming) setIsFarming(savedIsFarming === "true");
     if (savedTimeLeft) setTimeLeft(Number(savedTimeLeft));
-  }, [setBalance, setCurrentMP]);
+  }, []);
 
-  // 🔹 Lưu trạng thái vào localStorage mỗi khi thay đổi
-  useEffect(() => {
-    localStorage.setItem("balance", balance.toString());
-    localStorage.setItem("currentMP", currentMP.toString());
-  }, [balance, currentMP]);
-
+  // 🔹 Lưu trạng thái farming/timeLeft
   useEffect(() => {
     localStorage.setItem("isFarming", isFarming.toString());
   }, [isFarming]);

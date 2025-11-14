@@ -1,3 +1,4 @@
+// src/pages/Tasks.tsx
 import React, { useState, useEffect } from "react";
 import { Calendar, Clock, Trophy, Send, MessageCircle } from "lucide-react";
 
@@ -71,11 +72,10 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, currentMP, setCurren
       else if (task.id === "social-community") window.open("https://t.me/MoonTokenCommunity", "_blank");
     }
 
-    // ✅ Fix: cho phép Start bấm được và chuyển sang claimable ngay
-    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, claimable: true } : t)));
-
-    setPopup("Task started! Now claim your reward.");
-    setTimeout(() => setPopup(null), 1500);
+    // Khi bấm Start, chỉ bật claimable = true
+    if (!task.claimable) {
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, claimable: true } : t)));
+    }
   };
 
   const handleClaim = (id: string) => {
@@ -85,11 +85,13 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, currentMP, setCurren
     const task = tasks.find((t) => t.id === id);
     if (!task) return;
 
+    // Xác định số MP cần để claim
     const requiredMP = task.category === "daily" ? 5000
       : task.category === "weekly" ? 20000
       : task.category === "milestone" ? parseInt(task.id.split("-")[1])
       : 0;
 
+    // Nếu không đủ MP
     if (balance < requiredMP) {
       setPopup(`Not enough MP to claim.`);
       setTimeout(() => setPopup(null), 1500);
@@ -97,18 +99,16 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, currentMP, setCurren
       return;
     }
 
+    // Nếu đủ MP, nhận thưởng
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, completed: true, claimable: false } : t)));
     const newBalance = balance + task.reward;
-
     setBalance(newBalance);
     setCurrentMP(prev => prev + task.reward);
-    localStorage.setItem("user_balance", newBalance.toString());
 
     const updatedTasks = tasks.map(t => t.id === id ? { ...t, completed: true, claimable: false } : t);
     localStorage.setItem("user_tasks", JSON.stringify(updatedTasks));
 
     setPopup(`+${task.reward.toLocaleString()} MP`);
-
     setTimeout(() => {
       setPopup(null);
       setClaiming((s) => {
@@ -196,7 +196,7 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, currentMP, setCurren
                 </div>
                 <button
                   onClick={() => (task.claimable ? handleClaim(task.id) : handleComplete(task))}
-                  disabled={isDone || isProcessing ? true : false} // ✅ chỉ disable khi done hoặc đang xử lý
+                  disabled={isDone || isProcessing}
                   style={{
                     ...pixelBox,
                     minWidth: "90px",
