@@ -251,5 +251,4 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, currentMP, setCurren
     </div>
   );
 };
-
 export default Tasks;
