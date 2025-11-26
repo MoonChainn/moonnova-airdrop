@@ -2,12 +2,15 @@
 import React, { useEffect, useState } from "react";
 import { Copy } from "lucide-react";
 
-export default function Friends() {
+interface FriendsProps {
+  walletAddress: string | null; // nhận state từ App
+}
+
+export default function Friends({ walletAddress }: FriendsProps) {
   const [refCode, setRefCode] = useState<string | null>(null);
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [message, setMessage] = useState<string>("");
   const [messageType, setMessageType] = useState<"success" | "error" | "info">("info");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const pixelBox = {
     background: "linear-gradient(180deg, #b26cff 0%, #5032ff 100%)",
@@ -27,6 +30,7 @@ export default function Friends() {
     )`,
   };
 
+  // Message auto-hide
   useEffect(() => {
     if (!message) return;
     const t = setTimeout(() => {
@@ -36,63 +40,50 @@ export default function Friends() {
     return () => clearTimeout(t);
   }, [message]);
 
+  // Fetch referral code từ backend khi walletAddress thay đổi
   useEffect(() => {
-    const storedWallet = localStorage.getItem("walletAddress");
-    if (storedWallet) {
-      setWalletAddress(storedWallet);
-      (async () => {
-        try {
-          setLoading(true);
-          const res = await fetch(
-            `http://localhost:5000/api/referral/code?wallet=${encodeURIComponent(storedWallet)}`
-          );
-          if (!res.ok) {
-            let text = "";
-            try {
-              const json = await res.json();
-              text = json?.message || JSON.stringify(json);
-            } catch {
-              text = await res.text().catch(() => `Status ${res.status}`);
-            }
-            throw new Error(text || `Server returned ${res.status}`);
+    if (!walletAddress) return;
+
+    (async () => {
+      try {
+        setLoading(true);
+        const res = await fetch(
+          `https://moonnova-airdrop.onrender.com/api/referral/code?wallet=${encodeURIComponent(walletAddress)}`
+        );
+        if (!res.ok) {
+          let text = "";
+          try {
+            const json = await res.json();
+            text = json?.message || JSON.stringify(json);
+          } catch {
+            text = await res.text().catch(() => `Status ${res.status}`);
           }
-          const data = await res.json();
-          setRefCode(data.code ?? null);
-        } catch (err: any) {
-          console.error("Fetch ref code failed:", err);
-          setRefCode(null);
-          setMessage("Failed to fetch referral code.");
-          setMessageType("error");
-        } finally {
-          setLoading(false);
+          throw new Error(text || `Server returned ${res.status}`);
         }
-      })();
-    } else {
-      setLoading(false);
-    }
-  }, []);
+        const data = await res.json();
+        setRefCode(data.code ?? null);
+        if (!data.code) {
+          setMessage("Unable to get referral code, try again later.");
+          setMessageType("error");
+        }
+      } catch (err: any) {
+        console.error("Fetch ref code failed:", err);
+        setRefCode(null);
+        setMessage("Unable to get referral code, try again later.");
+        setMessageType("error");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [walletAddress]);
 
   const showNeedWallet = () => {
     setMessage("You need to connect a wallet to get a referral code.");
     setMessageType("error");
   };
 
-  const handleInvite = () => {
-    if (!walletAddress) {
-      showNeedWallet();
-      return;
-    }
-    if (!refCode) {
-      setMessage("Unable to get referral code, try again later.");
-      setMessageType("error");
-      return;
-    }
-    window.open(`https://moonnova.io/airdrop?ref=${refCode}`, "_blank");
-    setMessage("Invite link opened!");
-    setMessageType("success");
-  };
-
-  const handleCopy = async () => {
+  // Copy link referral, không mở trang mới
+  const handleInvite = async () => {
     if (!walletAddress) {
       showNeedWallet();
       return;
@@ -106,12 +97,13 @@ export default function Friends() {
       await navigator.clipboard.writeText(`https://moonnova.io/airdrop?ref=${refCode}`);
       setMessage("Referral link copied!");
       setMessageType("success");
-    } catch (err) {
-      console.error("Copy failed", err);
+    } catch {
       setMessage("Failed to copy, try again.");
       setMessageType("error");
     }
   };
+
+  const handleCopy = handleInvite; // copy cũng dùng chung logic
 
   return (
     <div className="flex flex-col items-center justify-center w-full min-h-screen px-4 bg-gradient-to-b from-gray-900 to-black text-white">

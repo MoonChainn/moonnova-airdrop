@@ -1,31 +1,85 @@
-
-
-
-// src/pages/Wallet.tsx
 import React, { useState, useEffect, useRef } from "react";
-import { TonConnectUI, useTonWallet } from "@tonconnect/ui-react";
+import { useTonWallet, useTonConnectUI } from "@tonconnect/ui-react";
 
 interface WalletProps {
   balance: number;
   setBalance: React.Dispatch<React.SetStateAction<number>>;
   walletAddress: string | null;
   setWalletAddress: React.Dispatch<React.SetStateAction<string | null>>;
+  currentMP: number;
+  setCurrentMP: React.Dispatch<React.SetStateAction<number>>;
 }
 
 export default function Wallet({ balance, setBalance, walletAddress, setWalletAddress }: WalletProps) {
   const wallet = useTonWallet();
-
-  // 🌟 Fix TonConnectUI chỉ khởi tạo 1 lần duy nhất
-  const tonConnectUIRef = useRef<TonConnectUI | null>(null);
-  if (!tonConnectUIRef.current) {
-    tonConnectUIRef.current = new TonConnectUI({
-      manifestUrl: "https://moonnova-airdrop.onrender.com/tonconnect-manifest.json",
-    });
-  }
-  const tonConnectUI = tonConnectUIRef.current;
+  const [tonConnectUI] = useTonConnectUI();
 
   const [connecting, setConnecting] = useState(false);
   const [loadingBalance, setLoadingBalance] = useState(false);
+  
+  // Ref để ngăn chặn gọi API 2 lần do React StrictMode
+  const isMerging = useRef(false);
+
+  // ⭐ LOGIC MỚI: Gộp điểm (Merge) từ Local lên Server, sau đó Xóa (Purge) Local
+  const syncAndMergeBalance = async (walletAddr: string) => {
+    // Nếu đang chạy merge rồi thì chặn lại
+    if (isMerging.current) return;
+    isMerging.current = true;
+    
+    try {
+      setLoadingBalance(true);
+      
+      // 1. Lấy điểm Guest hiện tại trong LocalStorage (Điểm chưa gộp)
+      const guestMp = Number(localStorage.getItem("user_balance") || "0");
+      console.log(`🔄 Syncing Wallet: ${walletAddr} | Guest MP to merge: ${guestMp}`);
+
+      // 2. Gọi API Merge (Gộp) - Endpoint Backend cần xử lý việc cộng dồn này
+      const res = await fetch(`https://moonnova-airdrop.onrender.com/api/user/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wallet: walletAddr,
+          guest_mp: guestMp 
+        })
+      });
+
+      if (!res.ok) throw new Error(`Merge failed: ${res.status}`);
+
+      const data = await res.json();
+
+      // 3. Nếu Server trả về thành công -> Cập nhật UI bằng điểm từ Server
+      if (typeof data.total_balance === "number") {
+        setWalletAddress(walletAddr);
+        setBalance(data.total_balance);
+
+        // 4. ⭐ QUAN TRỌNG NHẤT: Xóa điểm Guest ở LocalStorage
+        // Chỉ xóa khi server đã xác nhận nhận được điểm (để tránh mất oan nếu lỗi mạng)
+        if (guestMp > 0) {
+          localStorage.setItem("user_balance", "0");
+          console.log("✅ Local guest points reset to 0 (Secure Purge)");
+        }
+      }
+
+    } catch (err) {
+      console.error("Sync error:", err);
+      // Nếu lỗi, vẫn hiển thị ví đã connect nhưng KHÔNG xóa localStorage
+      // để bảo toàn điểm cho user thử lại sau.
+      setWalletAddress(walletAddr);
+    } finally {
+      setLoadingBalance(false);
+      isMerging.current = false;
+    }
+  };
+
+  // Tự động chạy logic Merge khi ví thay đổi
+  useEffect(() => {
+    if (wallet && wallet.account.address !== walletAddress) {
+      syncAndMergeBalance(wallet.account.address);
+    } else if (!wallet) {
+      // Nếu user ngắt kết nối từ extension
+      setWalletAddress(null);
+    }
+  }, [wallet]); 
 
   const pixelBox = {
     background: "linear-gradient(180deg, #b26cff 0%, #5032ff 100%)",
@@ -45,16 +99,15 @@ export default function Wallet({ balance, setBalance, walletAddress, setWalletAd
     )`,
   };
 
-  const shortenAddress = (address: string) => address.slice(0, 6) + "..." + address.slice(-4);
+  const shortenAddress = (address: string) =>
+    address.slice(0, 6) + "..." + address.slice(-4);
 
   const handleConnect = async () => {
     try {
       setConnecting(true);
-      const w = await tonConnectUI.connectWallet();
-      setWalletAddress(w.account.address); // đồng bộ lên App
+      await tonConnectUI.openModal();
     } catch (err) {
-      console.error("Wallet connection failed:", err);
-      alert("Unable to connect wallet. Make sure you have Tonkeeper or Tonhub installed!");
+      console.error("Wallet connection failed/cancelled:", err);
     } finally {
       setConnecting(false);
     }
@@ -63,37 +116,28 @@ export default function Wallet({ balance, setBalance, walletAddress, setWalletAd
   const handleDisconnect = async () => {
     await tonConnectUI.disconnect();
     setWalletAddress(null);
-    setBalance(0);
+    
+    // Khi thoát ví: Load lại điểm từ localStorage
+    // (Lúc này đã về 0 do logic Merge ở trên -> Đúng logic bảo mật)
+    const localMp = Number(localStorage.getItem("user_balance") || "0");
+    setBalance(localMp);
   };
-
-  const fetchBalance = async (walletAddr: string) => {
-    try {
-      setLoadingBalance(true);
-      const res = await fetch(`https://moonnova-airdrop.onrender.com/api/user/balance?wallet=${walletAddr}`);
-      if (!res.ok) throw new Error(`Status ${res.status}`);
-      const data = await res.json();
-      setBalance(data.balance || 0);
-    } catch (err) {
-      console.error("Fetch balance failed:", err);
-      setBalance(0);
-    } finally {
-      setLoadingBalance(false);
-    }
-  };
-
-  useEffect(() => {
-    if (walletAddress) {
-      fetchBalance(walletAddress);
-    }
-  }, [walletAddress]);
 
   return (
     <div className="flex flex-col items-center justify-center w-full min-h-screen px-4 py-8 bg-gradient-to-b from-gray-900 to-black text-white">
-      <div style={{ ...pixelBox, padding: "24px 20px", textAlign: "center", width: "100%", maxWidth: "400px" }}>
+      <div
+        style={{
+          ...pixelBox,
+          padding: "24px 20px",
+          textAlign: "center",
+          width: "100%",
+          maxWidth: "400px",
+        }}
+      >
         <h2 className="text-white font-bold text-lg mb-4">
           💰 Total Balance:{" "}
           <span className="ml-1 text-yellow-300">
-            {loadingBalance ? "Loading..." : balance.toLocaleString("en-US")} MP
+            {loadingBalance ? "Syncing..." : balance.toLocaleString("en-US")} MP
           </span>
         </h2>
 
@@ -135,7 +179,10 @@ export default function Wallet({ balance, setBalance, walletAddress, setWalletAd
 
         {walletAddress && (
           <p className="text-gray-200 text-sm mt-4">
-            Your wallet: <span className="text-blue-300 font-semibold">{shortenAddress(walletAddress)}</span>
+            Your wallet:{" "}
+            <span className="text-blue-300 font-semibold">
+              {shortenAddress(walletAddress)}
+            </span>
           </p>
         )}
 

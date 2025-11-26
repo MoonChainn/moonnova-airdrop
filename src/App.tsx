@@ -1,5 +1,5 @@
-// src/App.tsx
 import { useState, useEffect } from "react";
+import { TonConnectUIProvider } from "@tonconnect/ui-react"; 
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 import Home from "./pages/Home";
@@ -7,22 +7,22 @@ import Tasks from "./pages/Tasks";
 import Friends from "./pages/Friends";
 import Wallet from "./pages/Wallet";
 
+// ✅ Định nghĩa URL Manifest
+const manifestUrl = "https://moonnova-airdrop.onrender.com/tonconnect-manifest.json";
+
 export default function App() {
-  // ✅ Khởi tạo state từ localStorage nếu có, giữ nguyên logic
+  // ✅ Khởi tạo state từ localStorage nếu có (Cho Guest)
   const [balance, setBalance] = useState(() => {
     const saved = localStorage.getItem("user_balance");
     return saved ? Number(saved) : 0;
   });
 
-  const [currentMP, setCurrentMP] = useState(() => {
-    const saved = localStorage.getItem("user_currentMP");
-    return saved ? Number(saved) : 0;
-  });
-
+  const [currentMP, setCurrentMP] = useState<number>(0); 
   const [activeTab, setActiveTab] = useState<"home" | "tasks" | "friends" | "wallet">("home");
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [inviteCode, setInviteCode] = useState<string>("");
 
+  // ✅ Giữ nguyên logic khởi tạo tasks
   const [tasks, setTasks] = useState(() => {
     const base = [
       { id: "follow-x", title: "Follow MoonNova on X", reward: 2000, iconType: "x", completed: false, category: "standard", link: "https://x.com/MoonChainn?t=KXLQTp9k3bA-TG9UGrUp8Q&s=09" },
@@ -41,12 +41,15 @@ export default function App() {
     return [...base, ...milestones];
   });
 
-  // ✅ Lưu balance và currentMP mỗi khi thay đổi
+  // ⭐ FIX QUAN TRỌNG: Chỉ lưu vào LocalStorage khi user LÀ GUEST (chưa connect ví)
+  // Nếu đã connect ví (walletAddress !== null), điểm đó là của ví (từ DB), không được lưu vào máy.
   useEffect(() => {
-    localStorage.setItem("user_balance", String(balance));
-    localStorage.setItem("user_currentMP", String(currentMP));
-  }, [balance, currentMP]);
+    if (!walletAddress) {
+      localStorage.setItem("user_balance", String(balance));
+    }
+  }, [balance, walletAddress]);
 
+  // ✅ Khi wallet thay đổi, fetch invite code
   useEffect(() => {
     if (walletAddress) fetchInviteCode(walletAddress);
   }, [walletAddress]);
@@ -55,10 +58,10 @@ export default function App() {
     try {
       const res = await fetch(`https://moonnova-airdrop.onrender.com/api/referral/code?wallet=${encodeURIComponent(wallet)}`);
       const data = await res.json();
-      setInviteCode(data.code ?? "Initializing...");
+      setInviteCode(data.code ?? `INV-${wallet.slice(0, 5)}`);
     } catch (err) {
       console.error("Error fetching referral code:", err);
-      setInviteCode("INV-" + wallet.slice(0, 5));
+      setInviteCode(`INV-${wallet.slice(0, 5)}`);
     }
   };
 
@@ -67,22 +70,23 @@ export default function App() {
       case "home":
         return <Home balance={balance} setBalance={setBalance} currentMP={currentMP} setCurrentMP={setCurrentMP} />;
       case "tasks":
-        // <-- truyền currentMP + setCurrentMP để Tasks có thể cập nhật MP đúng (đã fix)
         return <Tasks balance={balance} setBalance={setBalance} currentMP={currentMP} setCurrentMP={setCurrentMP} tasks={tasks} setTasks={setTasks} />;
       case "friends":
-        return <Friends balance={balance} setBalance={setBalance} walletAddress={walletAddress} inviteCode={inviteCode} />;
+        return <Friends balance={balance} setBalance={setBalance} walletAddress={walletAddress} inviteCode={inviteCode} currentMP={currentMP} setCurrentMP={setCurrentMP} />;
       case "wallet":
-        return <Wallet balance={balance} setBalance={setBalance} walletAddress={walletAddress} setWalletAddress={setWalletAddress} />;
+        return <Wallet balance={balance} setBalance={setBalance} walletAddress={walletAddress} setWalletAddress={setWalletAddress} currentMP={currentMP} setCurrentMP={setCurrentMP} />;
       default:
         return <Home balance={balance} setBalance={setBalance} currentMP={currentMP} setCurrentMP={setCurrentMP} />;
     }
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-black text-white font-sans overflow-hidden">
-      {activeTab === "home" && <Header balance={balance} />}
-      <main className="flex-1 pb-24">{renderPage()}</main>
-      <Footer active={activeTab} onChange={setActiveTab} />
-    </div>
+    <TonConnectUIProvider manifestUrl={manifestUrl}>
+      <div className="flex flex-col min-h-screen bg-black text-white font-sans overflow-hidden">
+        {activeTab === "home" && <Header balance={balance} />}
+        <main className="flex-1 pb-24">{renderPage()}</main>
+        <Footer active={activeTab} onChange={setActiveTab} />
+      </div>
+    </TonConnectUIProvider>
   );
 }
