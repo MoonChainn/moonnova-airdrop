@@ -1,5 +1,5 @@
 import express from 'express';
-import * as walletController from '../controllers/walletController.js'; // ✅ FIX: Dùng 'import * as' để lấy toàn bộ các hàm đã export
+import walletController from '../controllers/walletController.js'; // ✅ ĐÚNG NHẤT
 
 const router = express.Router();
 
@@ -9,7 +9,10 @@ router.post('/merge', walletController.mergeAndSync);
 // Route để lấy mã giới thiệu
 router.get('/code', walletController.getReferralCode);
 
-// Route placeholder cho việc cộng điểm task sau này
+// Route để lấy số dư ví
+router.get('/balance', walletController.getBalance);
+
+// Route để cộng điểm task
 router.post('/add-points', walletController.addPoints);
 
 export default router;
