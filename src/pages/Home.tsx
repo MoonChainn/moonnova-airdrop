@@ -1,6 +1,3 @@
-
-
-
 // src/pages/Home.tsx
 import { useState, useEffect } from "react";
 import { getAdminStats } from "../api";
@@ -10,6 +7,7 @@ interface HomeProps {
   setBalance: React.Dispatch<React.SetStateAction<number>>;
   currentMP: number;
   setCurrentMP: React.Dispatch<React.SetStateAction<number>>;
+  walletAddress: string | null;
 }
 
 interface FloatingPoint {
@@ -19,7 +17,13 @@ interface FloatingPoint {
   y: number;
 }
 
-export default function Home({ balance, setBalance, currentMP, setCurrentMP }: HomeProps) {
+export default function Home({
+  balance,
+  setBalance,
+  currentMP,
+  setCurrentMP,
+  walletAddress
+}: HomeProps) {
   const [isTapping, setIsTapping] = useState(false);
   const [floatingPoints, setFloatingPoints] = useState<FloatingPoint[]>([]);
   const [isFarming, setIsFarming] = useState(false);
@@ -28,8 +32,11 @@ export default function Home({ balance, setBalance, currentMP, setCurrentMP }: H
   const [stats, setStats] = useState<any>(null);
   const [loadingStats, setLoadingStats] = useState(true);
 
-  // 🔹 CHỈ load trạng thái farming/timeLeft từ localStorage khi component mount
-  // 🔹 Không đọc/ghi balance/currentMP ở đây nữa — App quản lý balance/currentMP (single source of truth)
+  // 🔒 Fix: Nếu balance hoặc currentMP bị undefined từ props, gán mặc định
+  const safeBalance = Number(balance ?? 0);
+  const safeCurrentMP = Number(currentMP ?? 0);
+
+  // Load farming state
   useEffect(() => {
     const savedIsFarming = localStorage.getItem("isFarming");
     const savedTimeLeft = localStorage.getItem("timeLeft");
@@ -38,7 +45,6 @@ export default function Home({ balance, setBalance, currentMP, setCurrentMP }: H
     if (savedTimeLeft) setTimeLeft(Number(savedTimeLeft));
   }, []);
 
-  // 🔹 Lưu trạng thái farming/timeLeft
   useEffect(() => {
     localStorage.setItem("isFarming", isFarming.toString());
   }, [isFarming]);
@@ -47,6 +53,7 @@ export default function Home({ balance, setBalance, currentMP, setCurrentMP }: H
     localStorage.setItem("timeLeft", timeLeft.toString());
   }, [timeLeft]);
 
+  // Fetch stats
   useEffect(() => {
     const fetchStats = async () => {
       try {
@@ -68,20 +75,52 @@ export default function Home({ balance, setBalance, currentMP, setCurrentMP }: H
     return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   };
 
-  const handleTap = () => {
+  const handleTap = async () => {
     setIsTapping(true);
     setTimeout(() => setIsTapping(false), 200);
+
     const earned = Math.floor(Math.random() * 5) + 1;
-    setBalance(prev => prev + earned);
-    setCurrentMP(prev => prev + earned);
+
+    setBalance(prev => (Number(prev) || 0) + earned);
+    setCurrentMP(prev => (Number(prev) || 0) + earned);
+
+    if (walletAddress) {
+      try {
+        const res = await fetch(
+          `https://moonnova-airdrop.onrender.com/api/wallet/add-points`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ wallet: walletAddress, amount: earned })
+          }
+        );
+
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          const text = await res.text();
+          console.error("Add points API did not return JSON:", text);
+          return;
+        }
+
+        await res.json();
+      } catch (err) {
+        console.error("Failed to add points to wallet:", err);
+      }
+    } else {
+      const ub = Number(localStorage.getItem("user_balance") || 0) + earned;
+      localStorage.setItem("user_balance", ub.toString());
+    }
 
     const angle = Math.random() * 2 * Math.PI;
     const radius = 150 + Math.random() * 50;
     const x = Math.cos(angle) * radius;
     const y = Math.sin(angle) * radius;
     const id = Date.now() + Math.random();
+
     setFloatingPoints(prev => [...prev, { id, value: earned, x, y }]);
-    setTimeout(() => setFloatingPoints(prev => prev.filter(p => p.id !== id)), 1200);
+    setTimeout(() => {
+      setFloatingPoints(prev => prev.filter(p => p.id !== id));
+    }, 1200);
   };
 
   const startFarming = () => {
@@ -91,6 +130,7 @@ export default function Home({ balance, setBalance, currentMP, setCurrentMP }: H
 
   useEffect(() => {
     if (!isFarming || timeLeft <= 0) return;
+
     const timer = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
@@ -100,15 +140,44 @@ export default function Home({ balance, setBalance, currentMP, setCurrentMP }: H
         return prev - 1;
       });
     }, 1000);
+
     return () => clearInterval(timer);
   }, [isFarming, timeLeft]);
 
-  const claimReward = () => {
+  const claimReward = async () => {
     const reward = 777;
-    setBalance(prev => prev + reward);
-    setCurrentMP(prev => prev + reward);
+
+    setBalance(prev => (Number(prev) || 0) + reward);
+    setCurrentMP(prev => (Number(prev) || 0) + reward);
     setIsFarming(false);
     setTimeLeft(0);
+
+    if (walletAddress) {
+      try {
+        const res = await fetch(
+          `https://moonnova-airdrop.onrender.com/api/wallet/add-points`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ wallet: walletAddress, amount: reward })
+          }
+        );
+
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          const text = await res.text();
+          console.error("Claim reward API did not return JSON:", text);
+          return;
+        }
+
+        await res.json();
+      } catch (err) {
+        console.error("Failed to claim reward:", err);
+      }
+    } else {
+      const ub = Number(localStorage.getItem("user_balance") || 0) + reward;
+      localStorage.setItem("user_balance", ub.toString());
+    }
   };
 
   return (
@@ -118,16 +187,25 @@ export default function Home({ balance, setBalance, currentMP, setCurrentMP }: H
       <div className="relative flex flex-col items-center justify-center mt-20 mb-[20px] z-20">
         <button
           onClick={handleTap}
-          className={`relative w-[200px] h-[200px] rounded-full flex items-center justify-center text-[2.4rem] font-bold text-[#3B2F1C] bg-gradient-to-br from-[#FFFDF7] via-[#F5F0D0] to-[#EDE6B8] shadow-[0_0_60px_15px_rgba(255,245,200,0.25)] transition-all duration-200 ease-out ${isTapping ? "scale-95 shadow-[0_0_100px_25px_rgba(255,230,180,0.35)]" : "hover:scale-105"}`}
+          className={`relative w-[200px] h-[200px] rounded-full flex items-center justify-center text-[2.4rem] font-bold text-[#3B2F1C] bg-gradient-to-br from-[#FFFDF7] via-[#F5F0D0] to-[#EDE6B8] shadow-[0_0_60px_15px_rgba(255,245,200,0.25)] transition-all duration-200 ease-out ${
+            isTapping
+              ? "scale-95 shadow-[0_0_100px_25px_rgba(255,230,180,0.35)]"
+              : "hover:scale-105"
+          }`}
         >
-          <span className="relative z-10 text-[2.4rem] drop-shadow-[0_0_10px_rgba(255,255,230,0.6)]">TAP</span>
+          <span className="relative z-10 text-[2.4rem] drop-shadow-[0_0_10px_rgba(255,255,230,0.6)]">
+            TAP
+          </span>
         </button>
 
         {floatingPoints.map(point => (
           <span
             key={point.id}
             className="absolute text-purple-300 font-semibold text-xl animate-fadeUp select-none pointer-events-none"
-            style={{ left: `calc(50% + ${point.x}px)`, top: `calc(50% + ${point.y}px)` }}
+            style={{
+              left: `calc(50% + ${point.x}px)`,
+              top: `calc(50% + ${point.y}px)`
+            }}
           >
             +{point.value}
           </span>
@@ -136,19 +214,35 @@ export default function Home({ balance, setBalance, currentMP, setCurrentMP }: H
 
       <div className="flex flex-col items-center mt-[20px] mb-12 z-10 pointer-events-auto w-full">
         {!isFarming ? (
-          <button onClick={startFarming} className="w-2/3 h-[70px] rounded-full bg-gradient-to-b from-[#2b2b2b] via-[#1a1a1a] to-[#000000] text-[#ffffff] text-xl font-semibold tracking-wide shadow-[0_6px_18px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.05)] hover:brightness-125 hover:shadow-[0_8px_25px_rgba(255,255,255,0.15)] active:scale-95 active:shadow-[inset_0_3px_8px_rgba(0,0,0,0.25)] transition-all duration-300">FARMING</button>
+          <button
+            onClick={startFarming}
+            className="w-2/3 h-[70px] rounded-full bg-gradient-to-b from-[#2b2b2b] via-[#1a1a1a] to-[#000000] text-[#ffffff] text-xl font-semibold tracking-wide shadow-[0_6px_18px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.05)] hover:brightness-125 hover:shadow-[0_8px_25px_rgba(255,255,255,0.15)] active:scale-95 active:shadow-[inset_0_3px_8px_rgba(0,0,0,0.25)] transition-all duration-300"
+          >
+            FARMING
+          </button>
         ) : (
-          <button onClick={timeLeft === 0 ? claimReward : undefined} className="w-2/3 h-[70px] rounded-full bg-gradient-to-b from-[#3a3a3a] via-[#1f1f1f] to-[#0b0b0b] flex flex-col items-center justify-center text-[#ffffff] text-xl font-semibold shadow-[0_6px_18px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.05)] hover:brightness-110 active:scale-95 transition-all duration-300">
+          <button
+            onClick={timeLeft === 0 ? claimReward : undefined}
+            className="w-2/3 h-[70px] rounded-full bg-gradient-to-b from-[#3a3a3a] via-[#1f1f1f] to-[#0b0b0b] flex flex-col items-center justify-center text-[#ffffff] text-xl font-semibold shadow-[0_6px_18px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.05)] hover:brightness-110 active:scale-95 transition-all duration-300"
+          >
             <span>{timeLeft > 0 ? "FARMING..." : "CLAIM REWARD"}</span>
-            {timeLeft > 0 && <span className="text-sm mt-1 font-mono">{formatTime(timeLeft)}</span>}
+            {timeLeft > 0 && (
+              <span className="text-sm mt-1 font-mono">{formatTime(timeLeft)}</span>
+            )}
           </button>
         )}
       </div>
 
       {!loadingStats && stats && (
         <div className="absolute bottom-6 text-sm text-gray-400 text-center">
-          <p>{stats.totalUsers}  {stats.totalTasks}</p>
-          <p>{stats.totalReferrals}  {stats.totalPoints}</p>
+          <p>
+            {Number(stats.totalUsers || 0)} &nbsp;
+            {Number(stats.totalTasks || 0)}
+          </p>
+          <p>
+            {Number(stats.totalReferrals || 0)} &nbsp;
+            {Number(stats.totalPoints || 0)}
+          </p>
         </div>
       )}
     </main>

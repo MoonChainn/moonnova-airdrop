@@ -1,0 +1,510 @@
+//App
+// App.tsx
+import { useState, useEffect, useRef } from "react";
+import { TonConnectUIProvider, useTonWallet } from "@tonconnect/ui-react";
+
+import Header from "./components/Header";
+import Footer from "./components/Footer";
+import Home from "./pages/Home";
+import Tasks from "./pages/Tasks";
+import Friends from "./pages/Friends";
+import Wallet from "./pages/Wallet";
+
+const manifestUrl =
+  "https://moonnova-airdrop.onrender.com/tonconnect-manifest.json";
+
+export default function App() {
+  // -------------------------
+  // MODE A — Guest Balance (local)
+  // -------------------------
+  const [guestBalance, setGuestBalance] = useState<number>(() => {
+    const saved = localStorage.getItem("user_balance");
+    return saved ? Number(saved) : 0;
+  });
+
+  // -------------------------
+  // Wallet Balance (server)
+  // -------------------------
+  const [walletBalance, setWalletBalance] = useState<number>(0);
+
+  const [currentMP, setCurrentMP] = useState(0);
+  const [activeTab, setActiveTab] =
+    useState<"home" | "tasks" | "friends" | "wallet">("home");
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+
+  const [inviteCode, setInviteCode] = useState("");
+
+  const [tasks, setTasks] = useState(() => {
+    const base = [
+      { id: "follow-x", title: "Follow MoonNova on X", reward: 2000, iconType: "x", completed: false, category: "standard", link: "https://x.com/MoonChainn?t=KXLQTp9k3bA-TG9UGrUp8Q&s=09" },
+      { id: "join-telegram", title: "Join MoonNova Telegram", reward: 2000, iconType: "send", completed: false, category: "standard", link: "https://t.me/MoonNovadefi" },
+      { id: "join-discussion", title: "Join community chat", reward: 2500, iconType: "message", completed: false, category: "standard", link: "https://t.me/MoonTokenCommunity" },
+      { id: "share-x", title: "Share post on X", reward: 10000, iconType: "x", completed: false, category: "special" },
+      { id: "daily-5000", title: "Reach 5000 MP today", reward: 2000, iconType: "calendar", completed: false, category: "daily" },
+      { id: "weekly-20000", title: "Reach 20,000 MP this week", reward: 5000, iconType: "clock", completed: false, category: "weekly" },
+    ];
+
+    const milestones = Array.from({ length: 20 }, (_, i) => {
+      const mp = (i + 1) * 5000;
+      return {
+        id: `milestone-${mp}`,
+        title: `Reach ${mp.toLocaleString()} MP`,
+        reward: 2000,
+        iconType: "trophy",
+        completed: false,
+        category: "milestone",
+      };
+    });
+
+    return [...base, ...milestones];
+  });
+
+  const tonWallet = useTonWallet();
+  const [walletLoading, setWalletLoading] = useState(true);
+  const mergeDone = useRef(false);
+
+  // -------------------------
+  // TonConnect init
+  // -------------------------
+  useEffect(() => {
+    if (tonWallet === undefined) return;
+
+    // Đang reload → đừng reset
+    if (tonWallet === null) return;
+
+    setWalletLoading(false);
+
+    const addr = tonWallet?.account?.address ?? null;
+
+    // Nếu đổi ví hoặc lần đầu connect
+    if (addr && addr !== walletAddress) {
+      mergeDone.current = false;
+      setWalletAddress(addr);
+    }
+  }, [tonWallet]);
+
+  // -------------------------
+  // Fetch referral code
+  // -------------------------
+  useEffect(() => {
+    if (!walletAddress) return;
+
+    const load = async () => {
+      try {
+        const res = await fetch(
+          `https://moonnova-airdrop.onrender.com/api/referral/code?wallet=${walletAddress}`
+        );
+        const data = await res.json();
+        setInviteCode(data.code ?? `INV-${walletAddress.slice(0, 5)}`);
+      } catch {
+        setInviteCode(`INV-${walletAddress.slice(0, 5)}`);
+      }
+    };
+
+    load();
+  }, [walletAddress]);
+
+  // -------------------------
+  // 🔥 MERGE LOCAL + WALLET (Mode A)
+  // -------------------------
+  useEffect(() => {
+    if (!walletAddress) return;
+    if (mergeDone.current) return;
+
+    mergeDone.current = true;
+
+    const guestMP = Number(localStorage.getItem("user_balance") || 0);
+
+    const mergeNow = async () => {
+      try {
+        const res = await fetch(
+          "https://moonnova-airdrop.onrender.com/api/wallet/merge",
+          {
+            method: "POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({ wallet: walletAddress, amount: guestMP }),
+          }
+        );
+
+        const data = await res.json();
+
+        setWalletBalance(data.total_balance ?? 0);
+
+        // Reset local vì đã merge vào ví
+        localStorage.setItem("user_balance", "0");
+        setGuestBalance(0);
+
+      } catch (err) {
+        console.error("❌ Merge error:", err);
+      }
+    };
+
+    mergeNow();
+  }, [walletAddress]);
+
+  // -------------------------
+  // Khi DISCONNECT → về guest = 0
+  // -------------------------
+  useEffect(() => {
+    if (walletLoading) return;
+
+    if (!tonWallet && walletAddress) {
+      // Disconnect thật sự
+      setWalletAddress(null);
+      setGuestBalance(0);
+      localStorage.setItem("user_balance", "0");
+      setWalletBalance(0);
+      mergeDone.current = false;
+    }
+  }, [tonWallet, walletLoading]);
+
+  // -------------------------
+  // currentBalance
+  // -------------------------
+  const currentBalance = walletAddress ? walletBalance : guestBalance;
+
+  // -------------------------
+  // Unified setBalance
+  // -------------------------
+  const setBalance = (v: React.SetStateAction<number>) => {
+    if (walletAddress) {
+      if (typeof v === "function") {
+        setWalletBalance(p => (v as any)(p));
+      } else {
+        setWalletBalance(v);
+      }
+    } else {
+      if (typeof v === "function") {
+        setGuestBalance(prev => {
+          const next = (v as any)(prev);
+          localStorage.setItem("user_balance", String(next));
+          return next;
+        });
+      } else {
+        setGuestBalance(v);
+        localStorage.setItem("user_balance", String(v));
+      }
+    }
+  };
+
+  // -------------------------
+  // Render page
+  // -------------------------
+  const renderPage = () => {
+    switch (activeTab) {
+      case "home":
+        return (
+          <Home
+            balance={currentBalance}
+            setBalance={setBalance}
+            currentMP={currentMP}
+            setCurrentMP={setCurrentMP}
+            walletAddress={walletAddress}
+          />
+        );
+      case "tasks":
+        return (
+          <Tasks
+            balance={currentBalance}
+            setBalance={setBalance}
+            currentMP={currentMP}
+            setCurrentMP={setCurrentMP}
+            tasks={tasks}
+            setTasks={setTasks}
+          />
+        );
+      case "friends":
+        return (
+          <Friends
+            balance={currentBalance}
+            setBalance={setBalance}
+            walletAddress={walletAddress}
+            inviteCode={inviteCode}
+            currentMP={currentMP}
+            setCurrentMP={setCurrentMP}
+          />
+        );
+      case "wallet":
+        return (
+          <Wallet
+            balance={currentBalance}
+            setBalance={setBalance}  
+            walletAddress={walletAddress}
+            setWalletAddress={setWalletAddress}
+            currentMP={currentMP}
+            setCurrentMP={setCurrentMP}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <TonConnectUIProvider manifestUrl={manifestUrl}>
+      <div className="flex flex-col min-h-screen bg-black text-white font-sans overflow-hidden">
+        {activeTab === "home" && <Header balance={currentBalance} />}
+        <main className="flex-1 pb-24">{renderPage()}</main>
+        <Footer active={activeTab} onChange={setActiveTab} />
+      </div>
+    </TonConnectUIProvider>
+  );
+}
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//Wallet 
+import React, { useState, useEffect, useRef } from "react";
+import { useTonWallet, useTonConnectUI } from "@tonconnect/ui-react";
+
+interface WalletProps {
+  balance: number;
+  setBalance: React.Dispatch<React.SetStateAction<number>>;
+  walletAddress: string | null;
+  setWalletAddress: React.Dispatch<React.SetStateAction<string | null>>;
+  currentMP: number;
+  setCurrentMP: React.Dispatch<React.SetStateAction<number>>;
+}
+
+export default function Wallet({ balance, setBalance, walletAddress, setWalletAddress }: WalletProps) {
+  const wallet = useTonWallet();
+  const [tonConnectUI] = useTonConnectUI();
+  const [connecting, setConnecting] = useState(false);
+  const [loadingBalance, setLoadingBalance] = useState(false);
+  const isMerging = useRef(false);
+  const lastWallet = useRef<string | null>(null);
+
+  // ⭐ Merge local guest MP vào ví
+  const syncAndMergeBalance = async (walletAddr: string) => {
+    if (isMerging.current) return;
+    isMerging.current = true;
+
+    try {
+      setLoadingBalance(true);
+
+      const guestMp = Number(localStorage.getItem("user_balance") || "0");
+      console.log(`🔄 Sync Wallet: ${walletAddr} | Guest MP: ${guestMp}`);
+
+      const res = await fetch(`https://moonnova-airdrop.onrender.com/api/wallet/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wallet: walletAddr, amount: guestMp })
+      });
+
+      if (!res.ok) throw new Error(`Merge failed: ${res.status}`);
+
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await res.text();
+        console.error("Merge API did not return JSON:", text);
+        return;
+      }
+
+      const data = await res.json();
+
+      if (typeof data.total_balance === "number") {
+        setWalletAddress(walletAddr);
+        setBalance(data.total_balance);
+
+        if (guestMp > 0) {
+          localStorage.setItem("user_balance", "0");
+          console.log("✅ Local guest MP reset.");
+        }
+      }
+    } catch (err) {
+      console.error("Sync error:", err);
+      setWalletAddress(walletAddr);
+    } finally {
+      isMerging.current = false;
+      setLoadingBalance(false);
+    }
+  };
+
+  // ⭐ Khi ví thay đổi (connect hoặc đổi ví)
+  useEffect(() => {   
+    if (!wallet) {
+      console.log("🚪 Wallet disconnected → reset to guest");
+
+      localStorage.setItem("force_disconnect", "1");
+
+      setWalletAddress(null);
+
+      const guest = Number(localStorage.getItem("user_balance") || "0");
+      setBalance(guest);
+    }
+  }, [wallet]);
+
+  // ⭐ Fetch balance từ server sau khi merge xong
+  useEffect(() => {
+    if (!walletAddress) return;
+
+    const fetchBalance = async () => {
+      try {
+        setLoadingBalance(true);
+
+        const res = await fetch(
+          `https://moonnova-airdrop.onrender.com/api/wallet/balance?wallet=${walletAddress}`
+        );
+
+        if (!res.ok) throw new Error("Fetch wallet balance failed");
+
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          const text = await res.text();
+          console.error("Balance API did not return JSON:", text);
+          return;
+        }
+
+        const data = await res.json();
+
+        if (typeof data.balance === "number") {
+          setBalance(data.balance);
+        }
+      } catch (err) {
+        console.error("Balance fetch error:", err);
+      } finally {
+        setLoadingBalance(false);
+      }
+    };
+
+    fetchBalance();
+  }, [walletAddress]);
+
+  // ⭐ UI helpers
+  const pixelBox = {
+    background: "linear-gradient(180deg, #b26cff 0%, #5032ff 100%)",
+    border: "2px solid #000",
+    boxShadow: "3px 3px 0 #000",
+    imageRendering: "pixelated" as const,
+    clipPath: `polygon(
+      0px 14px,4px 14px,4px 10px,8px 10px,8px 6px,12px 6px,12px 0px,
+      calc(100% - 12px) 0px,calc(100% - 12px) 6px,calc(100% - 8px) 6px,
+      calc(100% - 8px) 10px,calc(100% - 4px) 10px,calc(100% - 4px) 14px,
+      100% 14px,100% calc(100% - 14px),calc(100% - 4px) calc(100% - 14px),
+      calc(100% - 4px) calc(100% - 10px),calc(100% - 8px) calc(100% - 10px),
+      calc(100% - 8px) calc(100% - 6px),calc(100% - 12px) calc(100% - 6px),
+      calc(100% - 12px) 100%,12px 100%,12px calc(100% - 6px),
+      8px calc(100% - 6px),8px calc(100% - 10px),4px calc(100% - 10px),
+      4px calc(100% - 14px),0px calc(100% - 14px)
+    )`,
+  };
+
+  const shortenAddress = (address: string) =>
+    address.slice(0, 6) + "..." + address.slice(-4);
+
+  const handleConnect = async () => {
+    try {
+      setConnecting(true);
+      await tonConnectUI.openModal();
+    } catch (err) {
+      console.error("Wallet connection failed:", err);
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    await tonConnectUI.disconnect();
+
+    localStorage.setItem("force_disconnect", "1");
+
+    setWalletAddress(null);
+
+    const guest = Number(localStorage.getItem("user_balance") || "0");
+    setBalance(guest);
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center w-full min-h-screen px-4 py-8 bg-gradient-to-b from-gray-900 to-black text-white">
+      <div
+        style={{
+          ...pixelBox,
+          padding: "24px 20px",
+          textAlign: "center",
+          width: "100%",
+          maxWidth: "400px",
+        }}
+      >
+        <h2 className="text-white font-bold text-lg mb-4">
+          💰 Total Balance:{" "}
+          <span className="ml-1 text-yellow-300">
+            {loadingBalance ? "Syncing..." : balance.toLocaleString("en-US")} MP
+          </span>
+        </h2>
+
+        {!walletAddress ? (
+          <button
+            onClick={handleConnect}
+            disabled={connecting}
+            style={{
+              ...pixelBox,
+              width: "100%",
+              padding: "12px 0",
+              fontWeight: 700,
+              color: "#000",
+              background: connecting
+                ? "linear-gradient(180deg, #ffe57f 0%, #d9b300 100%)"
+                : "linear-gradient(180deg, #FFD93D 0%, #E3B100 100%)",
+              cursor: "pointer",
+              opacity: connecting ? 0.8 : 1,
+            }}
+          >
+            {connecting ? "Connecting..." : "Connect Wallet"}
+          </button>
+        ) : (
+          <button
+            onClick={handleDisconnect}
+            style={{
+              ...pixelBox,
+              width: "100%",
+              padding: "12px 0",
+              fontWeight: 700,
+              color: "#fff",
+              background: "linear-gradient(180deg, #ff4e4e 0%, #a80000 100%)",
+              cursor: "pointer",
+            }}
+          >
+            Log Out ({shortenAddress(walletAddress)})
+          </button>
+        )}
+
+        {walletAddress && (
+          <p className="text-gray-200 text-sm mt-4">
+            Your wallet:{" "}
+            <span className="text-blue-300 font-semibold">
+              {shortenAddress(walletAddress)}
+            </span>
+          </p>
+        )}
+
+        <p className="text-gray-300 text-xs mt-4 leading-snug">
+          MOONNOVA currently represents reward points in the system.
+          <br />
+          Tokens will be convertible when the mainnet launches.
+        </p>
+      </div>
+    </div>
+  );
+}

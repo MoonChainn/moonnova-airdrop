@@ -80,18 +80,18 @@ async function getReferralCode(req, res) {
 }
 
 // ---------------------------
-// GET BALANCE (HÀM BỊ THIẾU)
+// GET BALANCE (sửa dùng param walletAddress)
 // ---------------------------
 async function getBalance(req, res) {
     try {
-        const { wallet } = req.query;
+        const { walletAddress } = req.params; // <-- lấy từ param path
 
-        if (!wallet) {
-            return res.status(400).json({ success: false, error: "Wallet query is required" });
+        if (!walletAddress) {
+            return res.status(400).json({ success: false, error: "Wallet address is required" });
         }
 
         const walletDoc = await Wallet.findOne({
-            walletAddress: wallet.toUpperCase()
+            walletAddress: walletAddress.toUpperCase()
         });
 
         if (!walletDoc) {
@@ -100,7 +100,7 @@ async function getBalance(req, res) {
 
         return res.json({
             success: true,
-            balance: walletDoc.balance
+            total_balance: walletDoc.balance // <-- giữ key là total_balance cho FE
         });
 
     } catch (error) {

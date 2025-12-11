@@ -1,13 +1,19 @@
-localStorage.removeItem("user_tasks");
-localStorage.removeItem("user_balance");
+{
+  "name": "MoonNova",
+  "description": "MoonNova Airdrop App",
+  "appUrl": "https://moonnova-airdrop.onrender.com",
+  "icons": ["https://moonnova-airdrop.onrender.com/icon.png"],
+  "themeColor": "#000000"
+}
 
 
 
 
 
 
-// src/App.tsx
+//App.tsx
 import { useState, useEffect } from "react";
+import { TonConnectUIProvider } from "@tonconnect/ui-react"; 
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 import Home from "./pages/Home";
@@ -15,22 +21,22 @@ import Tasks from "./pages/Tasks";
 import Friends from "./pages/Friends";
 import Wallet from "./pages/Wallet";
 
+// ✅ Định nghĩa URL Manifest
+const manifestUrl = "https://moonnova-airdrop.onrender.com/tonconnect-manifest.json";
+
 export default function App() {
-  // ✅ Khởi tạo state từ localStorage nếu có, giữ nguyên logic
+  // ✅ Khởi tạo state từ localStorage nếu có (Cho Guest)
   const [balance, setBalance] = useState(() => {
     const saved = localStorage.getItem("user_balance");
     return saved ? Number(saved) : 0;
   });
 
-  const [currentMP, setCurrentMP] = useState(() => {
-    const saved = localStorage.getItem("user_currentMP");
-    return saved ? Number(saved) : 0;
-  });
-
+  const [currentMP, setCurrentMP] = useState<number>(0); 
   const [activeTab, setActiveTab] = useState<"home" | "tasks" | "friends" | "wallet">("home");
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [inviteCode, setInviteCode] = useState<string>("");
 
+  // ✅ Giữ nguyên logic khởi tạo tasks
   const [tasks, setTasks] = useState(() => {
     const base = [
       { id: "follow-x", title: "Follow MoonNova on X", reward: 2000, iconType: "x", completed: false, category: "standard", link: "https://x.com/MoonChainn?t=KXLQTp9k3bA-TG9UGrUp8Q&s=09" },
@@ -49,12 +55,15 @@ export default function App() {
     return [...base, ...milestones];
   });
 
-  // ✅ Lưu balance và currentMP mỗi khi thay đổi
+  // ⭐ FIX QUAN TRỌNG: Chỉ lưu vào LocalStorage khi user LÀ GUEST (chưa connect ví)
+  // Nếu đã connect ví (walletAddress !== null), điểm đó là của ví (từ DB), không được lưu vào máy.
   useEffect(() => {
-    localStorage.setItem("user_balance", String(balance));
-    localStorage.setItem("user_currentMP", String(currentMP));
-  }, [balance, currentMP]);
+    if (!walletAddress) {
+      localStorage.setItem("user_balance", String(balance));
+    }
+  }, [balance, walletAddress]);
 
+  // ✅ Khi wallet thay đổi, fetch invite code
   useEffect(() => {
     if (walletAddress) fetchInviteCode(walletAddress);
   }, [walletAddress]);
@@ -63,10 +72,10 @@ export default function App() {
     try {
       const res = await fetch(`https://moonnova-airdrop.onrender.com/api/referral/code?wallet=${encodeURIComponent(wallet)}`);
       const data = await res.json();
-      setInviteCode(data.code ?? "Initializing...");
+      setInviteCode(data.code ?? `INV-${wallet.slice(0, 5)}`);
     } catch (err) {
       console.error("Error fetching referral code:", err);
-      setInviteCode("INV-" + wallet.slice(0, 5));
+      setInviteCode(`INV-${wallet.slice(0, 5)}`);
     }
   };
 
@@ -75,21 +84,203 @@ export default function App() {
       case "home":
         return <Home balance={balance} setBalance={setBalance} currentMP={currentMP} setCurrentMP={setCurrentMP} />;
       case "tasks":
-        return <Tasks balance={balance} setBalance={setBalance} tasks={tasks} setTasks={setTasks} />;
+        return <Tasks balance={balance} setBalance={setBalance} currentMP={currentMP} setCurrentMP={setCurrentMP} tasks={tasks} setTasks={setTasks} />;
       case "friends":
-        return <Friends balance={balance} setBalance={setBalance} walletAddress={walletAddress} inviteCode={inviteCode} />;
+        return <Friends balance={balance} setBalance={setBalance} walletAddress={walletAddress} inviteCode={inviteCode} currentMP={currentMP} setCurrentMP={setCurrentMP} />;
       case "wallet":
-        return <Wallet balance={balance} setBalance={setBalance} walletAddress={walletAddress} setWalletAddress={setWalletAddress} />;
+        return <Wallet balance={balance} setBalance={setBalance} walletAddress={walletAddress} setWalletAddress={setWalletAddress} currentMP={currentMP} setCurrentMP={setCurrentMP} />;
       default:
         return <Home balance={balance} setBalance={setBalance} currentMP={currentMP} setCurrentMP={setCurrentMP} />;
     }
   };
 
+
+
+useEffect(() => {
+  if (walletAddress) {
+    // Khi connect ví → merge điểm, xóa local
+    localStorage.removeItem("user_balance");
+    console.log("⚡ Guest points cleared because wallet is connected!");
+  } else {
+    // Khi chưa connect hoặc thoát ví → reset guest points
+    localStorage.setItem("user_balance", "0");
+    setBalance(0); // đồng bộ state với local
+    console.log("⚡ Guest points reset to 0 because wallet is disconnected");
+  }
+}, [walletAddress]);
+
+
+
+
+
+
+
+
   return (
-    <div className="flex flex-col min-h-screen bg-black text-white font-sans overflow-hidden">
-      {activeTab === "home" && <Header balance={balance} />}
-      <main className="flex-1 pb-24">{renderPage()}</main>
-      <Footer active={activeTab} onChange={setActiveTab} />
+    <TonConnectUIProvider manifestUrl={manifestUrl}>
+      <div className="flex flex-col min-h-screen bg-black text-white font-sans overflow-hidden">
+        {activeTab === "home" && <Header balance={balance} />}
+        <main className="flex-1 pb-24">{renderPage()}</main>
+        <Footer active={activeTab} onChange={setActiveTab} />
+      </div>
+    </TonConnectUIProvider>
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+import React, { useState, useEffect } from "react";
+import { useTonWallet, useTonConnectUI } from "@tonconnect/ui-react"; // ✅ Import hook useTonConnectUI
+
+interface WalletProps {
+  balance: number;
+  setBalance: React.Dispatch<React.SetStateAction<number>>;
+  walletAddress: string | null;
+  setWalletAddress: React.Dispatch<React.SetStateAction<string | null>>;
+}
+
+export default function Wallet({ balance, setBalance, walletAddress, setWalletAddress }: WalletProps) {
+  const wallet = useTonWallet();
+  
+  // ✅ Lấy instance UI từ Provider thay vì khởi tạo mới thủ công
+  const [tonConnectUI] = useTonConnectUI(); 
+
+  const [connecting, setConnecting] = useState(false); // Vẫn giữ state này để hiển thị UI loading nếu muốn
+  const [loadingBalance, setLoadingBalance] = useState(false);
+
+  // ✅ Cập nhật địa chỉ ví khi user connect thành công (Lắng nghe từ hook useTonWallet)
+  useEffect(() => {
+    if (wallet) {
+      setWalletAddress(wallet.account.address);
+      fetchBalance(wallet.account.address);
+    } else {
+      setWalletAddress(null);
+    }
+  }, [wallet, setWalletAddress]);
+
+  const pixelBox = {
+    background: "linear-gradient(180deg, #b26cff 0%, #5032ff 100%)",
+    border: "2px solid #000",
+    boxShadow: "3px 3px 0 #000",
+    imageRendering: "pixelated" as const,
+    clipPath: `polygon(
+      0px 14px,4px 14px,4px 10px,8px 10px,8px 6px,12px 6px,12px 0px,
+      calc(100% - 12px) 0px,calc(100% - 12px) 6px,calc(100% - 8px) 6px,
+      calc(100% - 8px) 10px,calc(100% - 4px) 10px,calc(100% - 4px) 14px,
+      100% 14px,100% calc(100% - 14px),calc(100% - 4px) calc(100% - 14px),
+      calc(100% - 4px) calc(100% - 10px),calc(100% - 8px) calc(100% - 10px),
+      calc(100% - 8px) calc(100% - 6px),calc(100% - 12px) calc(100% - 6px),
+      calc(100% - 12px) 100%,12px 100%,12px calc(100% - 6px),
+      8px calc(100% - 6px),8px calc(100% - 10px),4px calc(100% - 10px),
+      4px calc(100% - 14px),0px calc(100% - 14px)
+    )`,
+  };
+
+  const shortenAddress = (address: string) => address.slice(0, 6) + "..." + address.slice(-4);
+
+  // ✅ Sửa hàm connect: Sử dụng openModal để mở popup chuẩn của Telegram
+  const handleConnect = async () => {
+    try {
+      setConnecting(true);
+      // openModal tự động xử lý deep link tới Tonkeeper/Tonhub chuẩn hơn tự connect
+      await tonConnectUI.openModal(); 
+    } catch (err) {
+      console.error("Wallet connection failed/cancelled:", err);
+      // Không cần alert thủ công, UI của thư viện sẽ lo phần thông báo lỗi
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    await tonConnectUI.disconnect();
+    setWalletAddress(null);
+    setBalance(0);
+  };
+
+  const fetchBalance = async (walletAddr: string) => {
+    try {
+      setLoadingBalance(true);
+      const res = await fetch(`https://moonnova-airdrop.onrender.com/api/user/balance?wallet=${walletAddr}`);
+      if (!res.ok) throw new Error(`Status ${res.status}`);
+      const data = await res.json();
+      setBalance(data.balance || 0);
+    } catch (err) {
+      console.error("Fetch balance failed:", err);
+      setBalance(0);
+    } finally {
+      setLoadingBalance(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center w-full min-h-screen px-4 py-8 bg-gradient-to-b from-gray-900 to-black text-white">
+      <div style={{ ...pixelBox, padding: "24px 20px", textAlign: "center", width: "100%", maxWidth: "400px" }}>
+        <h2 className="text-white font-bold text-lg mb-4">
+          💰 Total Balance:{" "}
+          <span className="ml-1 text-yellow-300">
+            {loadingBalance ? "Loading..." : balance.toLocaleString("en-US")} MP
+          </span>
+        </h2>
+
+        {!walletAddress ? (
+          <button
+            onClick={handleConnect}
+            disabled={connecting}
+            style={{
+              ...pixelBox,
+              width: "100%",
+              padding: "12px 0",
+              fontWeight: 700,
+              color: "#000",
+              background: connecting
+                ? "linear-gradient(180deg, #ffe57f 0%, #d9b300 100%)"
+                : "linear-gradient(180deg, #FFD93D 0%, #E3B100 100%)",
+              cursor: "pointer",
+              opacity: connecting ? 0.8 : 1,
+            }}
+          >
+            {connecting ? "Connecting..." : "Connect Wallet"}
+          </button>
+        ) : (
+          <button
+            onClick={handleDisconnect}
+            style={{
+              ...pixelBox,
+              width: "100%",
+              padding: "12px 0",
+              fontWeight: 700,
+              color: "#fff",
+              background: "linear-gradient(180deg, #ff4e4e 0%, #a80000 100%)",
+              cursor: "pointer",
+            }}
+          >
+            Log Out ({shortenAddress(walletAddress)})
+          </button>
+        )}
+
+        {walletAddress && (
+          <p className="text-gray-200 text-sm mt-4">
+            Your wallet: <span className="text-blue-300 font-semibold">{shortenAddress(walletAddress)}</span>
+          </p>
+        )}
+
+        <p className="text-gray-300 text-xs mt-4 leading-snug">
+          MOONNOVA currently represents reward points in the system.
+          <br />
+          Tokens will be convertible when the mainnet launches.
+        </p>
+      </div>
     </div>
   );
 }
@@ -106,136 +297,7 @@ export default function App() {
 
 
 
-// src/App.tsx
-import { useState, useEffect } from "react";
-import Header from "./components/Header";
-import Footer from "./components/Footer";
-import Home from "./pages/Home";
-import Tasks from "./pages/Tasks";
-import Friends from "./pages/Friends";
-import Wallet from "./pages/Wallet";
-
-export default function App() {
-  // ✅ Khởi tạo state từ localStorage nếu có, giữ nguyên logic
-  const [balance, setBalance] = useState(() => {
-    const saved = localStorage.getItem("user_balance");
-    return saved ? Number(saved) : 0;
-  });
-
-  const [currentMP, setCurrentMP] = useState(() => {
-    const saved = localStorage.getItem("user_currentMP");
-    return saved ? Number(saved) : 0;
-  });
-
-  const [activeTab, setActiveTab] = useState<"home" | "tasks" | "friends" | "wallet">("home");
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
-  const [inviteCode, setInviteCode] = useState<string>("");
-
-  const [tasks, setTasks] = useState(() => {
-    const base = [
-      { id: "follow-x", title: "Follow MoonNova on X", reward: 2000, iconType: "x", completed: false, category: "standard", link: "https://x.com/MoonChainn?t=KXLQTp9k3bA-TG9UGrUp8Q&s=09" },
-      { id: "join-telegram", title: "Join MoonNova Telegram channel", reward: 2000, iconType: "send", completed: false, category: "standard", link: "https://t.me/MoonNovadefi" },
-      { id: "join-discussion", title: "Join community chat group", reward: 2500, iconType: "message", completed: false, category: "standard", link: "https://t.me/MoonTokenCommunity" },
-      { id: "share-x", title: "Share post on X", reward: 10000, iconType: "x", completed: false, category: "special" },
-      { id: "daily-5000", title: "Reach 5,000 MP today", reward: 2000, iconType: "calendar", completed: false, category: "daily" },
-      { id: "weekly-20000", title: "Reach 20,000 MP this week", reward: 5000, iconType: "clock", completed: false, category: "weekly" },
-    ];
-
-    const milestones = Array.from({ length: 20 }, (_, i) => {
-      const mp = (i + 1) * 5000;
-      return { id: `milestone-${mp}`, title: `Reach ${mp.toLocaleString()} MP milestone`, reward: 2000, iconType: "trophy", completed: false, category: "milestone" };
-    });
-
-    return [...base, ...milestones];
-  });
-
-  // ✅ Lưu balance và currentMP mỗi khi thay đổi
-  useEffect(() => {
-    localStorage.setItem("user_balance", String(balance));
-    localStorage.setItem("user_currentMP", String(currentMP));
-  }, [balance, currentMP]);
-
-  useEffect(() => {
-    if (walletAddress) fetchInviteCode(walletAddress);
-  }, [walletAddress]);
-
-  const fetchInviteCode = async (wallet: string) => {
-    try {
-      const res = await fetch(`https://moonnova-airdrop.onrender.com/api/referral/code?wallet=${encodeURIComponent(wallet)}`);
-      const data = await res.json();
-      setInviteCode(data.code ?? "Initializing...");
-    } catch (err) {
-      console.error("Error fetching referral code:", err);
-      setInviteCode("INV-" + wallet.slice(0, 5));
-    }
-  };
-
-  const renderPage = () => {
-    switch (activeTab) {
-      case "home":
-        return <Home balance={balance} setBalance={setBalance} currentMP={currentMP} setCurrentMP={setCurrentMP} />;
-      case "tasks":
-        return <Tasks balance={balance} setBalance={setBalance} tasks={tasks} setTasks={setTasks} />;
-      case "friends":
-        return <Friends balance={balance} setBalance={setBalance} walletAddress={walletAddress} inviteCode={inviteCode} />;
-      case "wallet":
-        return <Wallet balance={balance} setBalance={setBalance} walletAddress={walletAddress} setWalletAddress={setWalletAddress} />;
-      default:
-        return <Home balance={balance} setBalance={setBalance} currentMP={currentMP} setCurrentMP={setCurrentMP} />;
-    }
-  };
-
-  return (
-    <div className="flex flex-col min-h-screen bg-black text-white font-sans overflow-hidden">
-      {activeTab === "home" && <Header balance={balance} />}
-      <main className="flex-1 pb-24">{renderPage()}</main>
-      <Footer active={activeTab} onChange={setActiveTab} />
-    </div>
-  );
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// src/components/Header.tsx
 import React from "react";
 
 interface HeaderProps {
@@ -261,18 +323,16 @@ const Header: React.FC<HeaderProps> = ({ balance }) => {
     border: "2px solid #000",
     boxShadow: "3px 3px 0 #000",
     imageRendering: "pixelated" as const,
-    clipPath: `
-      polygon(
-        0px 14px, 4px 14px, 4px 10px, 8px 10px, 8px 6px, 12px 6px, 12px 0px,
-        calc(100% - 12px) 0px, calc(100% - 12px) 6px, calc(100% - 8px) 6px,
-        calc(100% - 8px) 10px, calc(100% - 4px) 10px, calc(100% - 4px) 14px,
-        100% 14px, 100% calc(100% - 14px), calc(100% - 4px) calc(100% - 14px),
-        calc(100% - 4px) calc(100% - 10px), calc(100% - 8px) calc(100% - 10px),
-        calc(100% - 8px) calc(100% - 6px), calc(100% - 12px) calc(100% - 6px),
-        calc(100% - 12px) 100%, 12px 100%, 12px calc(100% - 6px), 8px calc(100% - 6px),
-        8px calc(100% - 10px), 4px calc(100% - 10px), 4px calc(100% - 14px), 0px calc(100% - 14px)
-      )
-    `,
+    clipPath: `polygon(
+      0px 14px, 4px 14px, 4px 10px, 8px 10px, 8px 6px, 12px 6px, 12px 0px,
+      calc(100% - 12px) 0px, calc(100% - 12px) 6px, calc(100% - 8px) 6px,
+      calc(100% - 8px) 10px, calc(100% - 4px) 10px, calc(100% - 4px) 14px,
+      100% 14px, 100% calc(100% - 14px), calc(100% - 4px) calc(100% - 14px),
+      calc(100% - 4px) calc(100% - 10px), calc(100% - 8px) calc(100% - 10px),
+      calc(100% - 8px) calc(100% - 6px), calc(100% - 12px) calc(100% - 6px),
+      calc(100% - 12px) 100%, 12px 100%, 12px calc(100% - 6px), 8px calc(100% - 6px),
+      8px calc(100% - 10px), 4px calc(100% - 10px), 4px calc(100% - 14px), 0px calc(100% - 14px)
+    )`,
   };
 
   return (
@@ -302,9 +362,7 @@ export default Header;
 
 
 
-
-
-
+// src/pages/Home.tsx
 import { useState, useEffect } from "react";
 import { getAdminStats } from "../api";
 
@@ -330,6 +388,25 @@ export default function Home({ balance, setBalance, currentMP, setCurrentMP }: H
 
   const [stats, setStats] = useState<any>(null);
   const [loadingStats, setLoadingStats] = useState(true);
+
+  // 🔹 CHỈ load trạng thái farming/timeLeft từ localStorage khi component mount
+  // 🔹 Không đọc/ghi balance/currentMP ở đây nữa — App quản lý balance/currentMP (single source of truth)
+  useEffect(() => {
+    const savedIsFarming = localStorage.getItem("isFarming");
+    const savedTimeLeft = localStorage.getItem("timeLeft");
+
+    if (savedIsFarming) setIsFarming(savedIsFarming === "true");
+    if (savedTimeLeft) setTimeLeft(Number(savedTimeLeft));
+  }, []);
+
+  // 🔹 Lưu trạng thái farming/timeLeft
+  useEffect(() => {
+    localStorage.setItem("isFarming", isFarming.toString());
+  }, [isFarming]);
+
+  useEffect(() => {
+    localStorage.setItem("timeLeft", timeLeft.toString());
+  }, [timeLeft]);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -357,9 +434,8 @@ export default function Home({ balance, setBalance, currentMP, setCurrentMP }: H
     setTimeout(() => setIsTapping(false), 200);
     const earned = Math.floor(Math.random() * 5) + 1;
     setBalance(prev => prev + earned);
-    setCurrentMP(prev => prev + earned); // ✅ update MP
+    setCurrentMP(prev => prev + earned);
 
-    // Hiệu ứng floating point
     const angle = Math.random() * 2 * Math.PI;
     const radius = 150 + Math.random() * 50;
     const x = Math.cos(angle) * radius;
@@ -391,7 +467,7 @@ export default function Home({ balance, setBalance, currentMP, setCurrentMP }: H
   const claimReward = () => {
     const reward = 777;
     setBalance(prev => prev + reward);
-    setCurrentMP(prev => prev + reward); // ✅ update MP
+    setCurrentMP(prev => prev + reward);
     setIsFarming(false);
     setTimeLeft(0);
   };
@@ -439,9 +515,6 @@ export default function Home({ balance, setBalance, currentMP, setCurrentMP }: H
     </main>
   );
 }
-
-
-
 
 
 
@@ -530,7 +603,8 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, currentMP, setCurren
       else if (task.id === "social-community") window.open("https://t.me/MoonTokenCommunity", "_blank");
     }
 
-    if (task.category === "special" || task.category === "standard") {
+    // Khi bấm Start, chỉ bật claimable = true
+    if (!task.claimable) {
       setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, claimable: true } : t)));
     }
   };
@@ -542,11 +616,13 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, currentMP, setCurren
     const task = tasks.find((t) => t.id === id);
     if (!task) return;
 
+    // Xác định số MP cần để claim
     const requiredMP = task.category === "daily" ? 5000
       : task.category === "weekly" ? 20000
       : task.category === "milestone" ? parseInt(task.id.split("-")[1])
       : 0;
 
+    // Nếu không đủ MP
     if (balance < requiredMP) {
       setPopup(`Not enough MP to claim.`);
       setTimeout(() => setPopup(null), 1500);
@@ -554,21 +630,16 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, currentMP, setCurren
       return;
     }
 
+    // Nếu đủ MP, nhận thưởng
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, completed: true, claimable: false } : t)));
     const newBalance = balance + task.reward;
-
-    setBalance(newBalance);        // ✅ update balance in App
-    // ✅ update currentMP via setter passed from App (now guaranteed to exist)
+    setBalance(newBalance);
     setCurrentMP(prev => prev + task.reward);
-
-    // remove duplicate persisting here; App's effect will persist user_balance / user_currentMP
-    // localStorage.setItem("user_balance", newBalance.toString());  <-- removed
 
     const updatedTasks = tasks.map(t => t.id === id ? { ...t, completed: true, claimable: false } : t);
     localStorage.setItem("user_tasks", JSON.stringify(updatedTasks));
 
     setPopup(`+${task.reward.toLocaleString()} MP`);
-
     setTimeout(() => {
       setPopup(null);
       setClaiming((s) => {
@@ -711,7 +782,6 @@ const Tasks: React.FC<TasksProps> = ({ balance, setBalance, currentMP, setCurren
     </div>
   );
 };
-
 export default Tasks;
 
 
@@ -725,32 +795,16 @@ export default Tasks;
 
 
 
+// src/pages/Friends.tsx
+import React, { useEffect, useState } from "react";
+import { Copy } from "lucide-react";
 
-// src/pages/Wallet.tsx
-import React, { useState, useEffect, useRef } from "react";
-import { TonConnectUI, useTonWallet } from "@tonconnect/ui-react";
-
-interface WalletProps {
-  balance: number;
-  setBalance: React.Dispatch<React.SetStateAction<number>>;
-  walletAddress: string | null;
-  setWalletAddress: React.Dispatch<React.SetStateAction<string | null>>;
-}
-
-export default function Wallet({ balance, setBalance, walletAddress, setWalletAddress }: WalletProps) {
-  const wallet = useTonWallet();
-
-  // 🌟 Fix TonConnectUI chỉ khởi tạo 1 lần duy nhất
-  const tonConnectUIRef = useRef<TonConnectUI | null>(null);
-  if (!tonConnectUIRef.current) {
-    tonConnectUIRef.current = new TonConnectUI({
-      manifestUrl: "https://moonnova-airdrop.onrender.com/tonconnect-manifest.json",
-    });
-  }
-  const tonConnectUI = tonConnectUIRef.current;
-
-  const [connecting, setConnecting] = useState(false);
-  const [loadingBalance, setLoadingBalance] = useState(false);
+export default function Friends() {
+  const [refCode, setRefCode] = useState<string | null>(null);
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [message, setMessage] = useState<string>("");
+  const [messageType, setMessageType] = useState<"success" | "error" | "info">("info");
+  const [loading, setLoading] = useState(true);
 
   const pixelBox = {
     background: "linear-gradient(180deg, #b26cff 0%, #5032ff 100%)",
@@ -770,16 +824,286 @@ export default function Wallet({ balance, setBalance, walletAddress, setWalletAd
     )`,
   };
 
-  const shortenAddress = (address: string) => address.slice(0, 6) + "..." + address.slice(-4);
+  useEffect(() => {
+    if (!message) return;
+    const t = setTimeout(() => {
+      setMessage("");
+      setMessageType("info");
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [message]);
+
+  useEffect(() => {
+    const storedWallet = localStorage.getItem("walletAddress");
+    if (storedWallet) {
+      setWalletAddress(storedWallet);
+      (async () => {
+        try {
+          setLoading(true);
+          const res = await fetch(
+            `http://localhost:5000/api/referral/code?wallet=${encodeURIComponent(storedWallet)}`
+          );
+          if (!res.ok) {
+            let text = "";
+            try {
+              const json = await res.json();
+              text = json?.message || JSON.stringify(json);
+            } catch {
+              text = await res.text().catch(() => `Status ${res.status}`);
+            }
+            throw new Error(text || `Server returned ${res.status}`);
+          }
+          const data = await res.json();
+          setRefCode(data.code ?? null);
+        } catch (err: any) {
+          console.error("Fetch ref code failed:", err);
+          setRefCode(null);
+          setMessage("Failed to fetch referral code.");
+          setMessageType("error");
+        } finally {
+          setLoading(false);
+        }
+      })();
+    } else {
+      setLoading(false);
+    }
+  }, []);
+
+  const showNeedWallet = () => {
+    setMessage("You need to connect a wallet to get a referral code.");
+    setMessageType("error");
+  };
+
+  const handleInvite = () => {
+    if (!walletAddress) {
+      showNeedWallet();
+      return;
+    }
+    if (!refCode) {
+      setMessage("Unable to get referral code, try again later.");
+      setMessageType("error");
+      return;
+    }
+    window.open(`https://moonnova.io/airdrop?ref=${refCode}`, "_blank");
+    setMessage("Invite link opened!");
+    setMessageType("success");
+  };
+
+  const handleCopy = async () => {
+    if (!walletAddress) {
+      showNeedWallet();
+      return;
+    }
+    if (!refCode) {
+      setMessage("Unable to get referral code, try again later.");
+      setMessageType("error");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(`https://moonnova.io/airdrop?ref=${refCode}`);
+      setMessage("Referral link copied!");
+      setMessageType("success");
+    } catch (err) {
+      console.error("Copy failed", err);
+      setMessage("Failed to copy, try again.");
+      setMessageType("error");
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center w-full min-h-screen px-4 bg-gradient-to-b from-gray-900 to-black text-white">
+      <div
+        style={{
+          ...pixelBox,
+          padding: "20px",
+          textAlign: "center",
+          width: "100%",
+          maxWidth: "400px",
+          marginBottom: "20px",
+        }}
+      >
+        <h3 className="text-white font-bold text-lg mb-3">Referral Rewards</h3>
+        <p className="text-white font-semibold text-base mb-2">
+          Invite a friend and earn 7000 MP
+        </p>
+        <p className="text-gray-300 text-sm">
+          Additional rewards will be added as the project expands
+        </p>
+      </div>
+
+      <div
+        className="flex justify-center items-center"
+        style={{ marginTop: "20px", width: "100%", maxWidth: "400px", gap: "23px" }}
+      >
+        <button
+          style={{ ...pixelBox, flex: 1, padding: "12px 0", color: "#fff", fontWeight: 700, cursor: "pointer" }}
+          onClick={handleInvite}
+        >
+          Invite a friend
+        </button>
+        <button
+          style={{
+            ...pixelBox,
+            width: "60px",
+            height: "48px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+          }}
+          onClick={handleCopy}
+        >
+          <Copy size={20} className="text-white" />
+        </button>
+      </div>
+
+      <div style={{ height: 28, marginTop: 20 }}>
+        {loading && (
+          <p className="text-gray-400 text-xs mt-2 animate-pulse">Loading referral code...</p>
+        )}
+        {!loading && message && (
+          <p
+            className="text-xs mt-3 transition-all duration-300"
+            style={{ color: messageType === "success" ? "#4ade80" : "#f87171" }}
+          >
+            {message}
+          </p>
+        )}
+      </div>
+
+      <style>{`
+        .animate-pulse { animation: pulse 1.2s infinite; }
+        @keyframes pulse {
+          0% { opacity: 1; }
+          50% { opacity: 0.6; }
+          100% { opacity: 1; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+import React, { useState, useEffect, useRef } from "react";
+import { useTonWallet, useTonConnectUI } from "@tonconnect/ui-react";
+
+interface WalletProps {
+  balance: number;
+  setBalance: React.Dispatch<React.SetStateAction<number>>;
+  walletAddress: string | null;
+  setWalletAddress: React.Dispatch<React.SetStateAction<string | null>>;
+  currentMP: number;
+  setCurrentMP: React.Dispatch<React.SetStateAction<number>>;
+}
+
+export default function Wallet({ balance, setBalance, walletAddress, setWalletAddress }: WalletProps) {
+  const wallet = useTonWallet();
+  const [tonConnectUI] = useTonConnectUI();
+
+  const [connecting, setConnecting] = useState(false);
+  const [loadingBalance, setLoadingBalance] = useState(false);
+  
+  // Ref để ngăn chặn gọi API 2 lần do React StrictMode
+  const isMerging = useRef(false);
+
+  // ⭐ LOGIC MỚI: Gộp điểm (Merge) từ Local lên Server, sau đó Xóa (Purge) Local
+  const syncAndMergeBalance = async (walletAddr: string) => {
+    // Nếu đang chạy merge rồi thì chặn lại
+    if (isMerging.current) return;
+    isMerging.current = true;
+    
+    try {
+      setLoadingBalance(true);
+      
+      // 1. Lấy điểm Guest hiện tại trong LocalStorage (Điểm chưa gộp)
+      const guestMp = Number(localStorage.getItem("user_balance") || "0");
+      console.log(`🔄 Syncing Wallet: ${walletAddr} | Guest MP to merge: ${guestMp}`);
+
+      // 2. Gọi API Merge (Gộp) - Endpoint Backend cần xử lý việc cộng dồn này
+      const res = await fetch(`https://moonnova-airdrop.onrender.com/api/user/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wallet: walletAddr,
+          guest_mp: guestMp 
+        })
+      });
+
+      if (!res.ok) throw new Error(`Merge failed: ${res.status}`);
+
+      const data = await res.json();
+
+      // 3. Nếu Server trả về thành công -> Cập nhật UI bằng điểm từ Server
+      if (typeof data.total_balance === "number") {
+        setWalletAddress(walletAddr);
+        setBalance(data.total_balance);
+
+        // 4. ⭐ QUAN TRỌNG NHẤT: Xóa điểm Guest ở LocalStorage
+        // Chỉ xóa khi server đã xác nhận nhận được điểm (để tránh mất oan nếu lỗi mạng)
+        if (guestMp > 0) {
+          localStorage.setItem("user_balance", "0");
+          console.log("✅ Local guest points reset to 0 (Secure Purge)");
+        }
+      }
+
+    } catch (err) {
+      console.error("Sync error:", err);
+      // Nếu lỗi, vẫn hiển thị ví đã connect nhưng KHÔNG xóa localStorage
+      // để bảo toàn điểm cho user thử lại sau.
+      setWalletAddress(walletAddr);
+    } finally {
+      setLoadingBalance(false);
+      isMerging.current = false;
+    }
+  };
+
+  // Tự động chạy logic Merge khi ví thay đổi
+  useEffect(() => {
+    if (wallet && wallet.account.address !== walletAddress) {
+      syncAndMergeBalance(wallet.account.address);
+    } else if (!wallet) {
+      // Nếu user ngắt kết nối từ extension
+      setWalletAddress(null);
+    }
+  }, [wallet]); 
+
+  const pixelBox = {
+    background: "linear-gradient(180deg, #b26cff 0%, #5032ff 100%)",
+    border: "2px solid #000",
+    boxShadow: "3px 3px 0 #000",
+    imageRendering: "pixelated" as const,
+    clipPath: `polygon(
+      0px 14px,4px 14px,4px 10px,8px 10px,8px 6px,12px 6px,12px 0px,
+      calc(100% - 12px) 0px,calc(100% - 12px) 6px,calc(100% - 8px) 6px,
+      calc(100% - 8px) 10px,calc(100% - 4px) 10px,calc(100% - 4px) 14px,
+      100% 14px,100% calc(100% - 14px),calc(100% - 4px) calc(100% - 14px),
+      calc(100% - 4px) calc(100% - 10px),calc(100% - 8px) calc(100% - 10px),
+      calc(100% - 8px) calc(100% - 6px),calc(100% - 12px) calc(100% - 6px),
+      calc(100% - 12px) 100%,12px 100%,12px calc(100% - 6px),
+      8px calc(100% - 6px),8px calc(100% - 10px),4px calc(100% - 10px),
+      4px calc(100% - 14px),0px calc(100% - 14px)
+    )`,
+  };
+
+  const shortenAddress = (address: string) =>
+    address.slice(0, 6) + "..." + address.slice(-4);
 
   const handleConnect = async () => {
     try {
       setConnecting(true);
-      const w = await tonConnectUI.connectWallet();
-      setWalletAddress(w.account.address); // đồng bộ lên App
+      await tonConnectUI.openModal();
     } catch (err) {
-      console.error("Wallet connection failed:", err);
-      alert("Unable to connect wallet. Make sure you have Tonkeeper or Tonhub installed!");
+      console.error("Wallet connection failed/cancelled:", err);
     } finally {
       setConnecting(false);
     }
@@ -788,37 +1112,28 @@ export default function Wallet({ balance, setBalance, walletAddress, setWalletAd
   const handleDisconnect = async () => {
     await tonConnectUI.disconnect();
     setWalletAddress(null);
-    setBalance(0);
+    
+    // Khi thoát ví: Load lại điểm từ localStorage
+    // (Lúc này đã về 0 do logic Merge ở trên -> Đúng logic bảo mật)
+    const localMp = Number(localStorage.getItem("user_balance") || "0");
+    setBalance(localMp);
   };
-
-  const fetchBalance = async (walletAddr: string) => {
-    try {
-      setLoadingBalance(true);
-      const res = await fetch(`https://moonnova-airdrop.onrender.com/api/user/balance?wallet=${walletAddr}`);
-      if (!res.ok) throw new Error(`Status ${res.status}`);
-      const data = await res.json();
-      setBalance(data.balance || 0);
-    } catch (err) {
-      console.error("Fetch balance failed:", err);
-      setBalance(0);
-    } finally {
-      setLoadingBalance(false);
-    }
-  };
-
-  useEffect(() => {
-    if (walletAddress) {
-      fetchBalance(walletAddress);
-    }
-  }, [walletAddress]);
 
   return (
     <div className="flex flex-col items-center justify-center w-full min-h-screen px-4 py-8 bg-gradient-to-b from-gray-900 to-black text-white">
-      <div style={{ ...pixelBox, padding: "24px 20px", textAlign: "center", width: "100%", maxWidth: "400px" }}>
+      <div
+        style={{
+          ...pixelBox,
+          padding: "24px 20px",
+          textAlign: "center",
+          width: "100%",
+          maxWidth: "400px",
+        }}
+      >
         <h2 className="text-white font-bold text-lg mb-4">
           💰 Total Balance:{" "}
           <span className="ml-1 text-yellow-300">
-            {loadingBalance ? "Loading..." : balance.toLocaleString("en-US")} MP
+            {loadingBalance ? "Syncing..." : balance.toLocaleString("en-US")} MP
           </span>
         </h2>
 
@@ -860,7 +1175,10 @@ export default function Wallet({ balance, setBalance, walletAddress, setWalletAd
 
         {walletAddress && (
           <p className="text-gray-200 text-sm mt-4">
-            Your wallet: <span className="text-blue-300 font-semibold">{shortenAddress(walletAddress)}</span>
+            Your wallet:{" "}
+            <span className="text-blue-300 font-semibold">
+              {shortenAddress(walletAddress)}
+            </span>
           </p>
         )}
 
@@ -888,153 +1206,625 @@ export default function Wallet({ balance, setBalance, walletAddress, setWalletAd
 
 
 
-// src/pages/Wallet.tsx
-import React, { useState, useEffect, useRef } from "react";
-import { TonConnectUI, useTonWallet } from "@tonconnect/ui-react";
 
-interface WalletProps {
+backend/index.js
+// src/index.js
+import path from "path";
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import { fileURLToPath } from "url";
+import connectDB from "./db.js";
+
+// 🔹 Import ALL routes
+import userRoutes from "./routes/userRoutes.js";          // ← đã tích hợp wallet merge + referral
+import taskRoutes from "./routes/taskRoutes.js";
+import referralRoutes from "./routes/referralRoutes.js";
+import telegramRoutes from "./routes/telegramRoutes.js";
+import socialRoutes from "./routes/socialRoutes.js";
+import pointsRoutes from "./routes/pointsRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
+
+// ---------------------------------------------
+// 🔧 Config environment & dirname
+// ---------------------------------------------
+dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// ---------------------------------------------
+// 🔗 MongoDB Connection
+// ---------------------------------------------
+connectDB();
+
+// ---------------------------------------------
+// ⚙️ Create Express App
+// ---------------------------------------------
+const app = express();
+
+// 🧩 Middleware
+app.use(cors());
+app.use(express.json());
+
+// 📁 Static folder for uploads
+app.use("/uploads", express.static(path.join(path.resolve(), "uploads")));
+
+// ---------------------------------------------
+// 🧠 ALL API Routes (old + new wallet system)
+// ---------------------------------------------
+app.use("/api/users", userRoutes);          // ← Wallet login / merge / referral / add-points
+app.use("/api/tasks", taskRoutes);
+app.use("/api/referrals", referralRoutes);
+app.use("/api/telegram", telegramRoutes);
+app.use("/api/social", socialRoutes);
+app.use("/api/points", pointsRoutes);
+app.use("/api/admin", adminRoutes);
+
+// ---------------------------------------------
+// 🩺 Server check routes
+// ---------------------------------------------
+app.get("/api", (req, res) => {
+  res.send("🚀 Server is running and connected to MongoDB!");
+});
+
+app.get("/api/health", (req, res) => {
+  res.json({
+    ok: true,
+    uptime: process.uptime(),
+    timestamp: new Date(),
+  });
+});
+
+// ---------------------------------------------
+// 🌐 FRONTEND SERVE (Vite build inside backend/src/dist)
+// ---------------------------------------------
+app.use(express.static(path.join(__dirname, "./dist")));
+
+// TonConnect manifest special route
+app.get('/tonconnect-manifest.json', (req, res) => {
+  res.sendFile(path.join(__dirname, "dist", "tonconnect-manifest.json"), {
+    headers: { 'Content-Type': 'application/json' }
+  });
+});
+
+// Fallback for SPA
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "./dist", "index.html"));
+});
+
+// ---------------------------------------------
+// ❌ Global Error Handler
+// ---------------------------------------------
+app.use((err, req, res, next) => {
+  console.error("🔥 Server Error:", err.stack || err);
+  res.status(500).json({
+    success: false,
+    message: "Internal Server Error",
+  });
+});
+
+// ---------------------------------------------
+// 🚀 Start Server
+// ---------------------------------------------
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`✅ Server running on http://localhost:${PORT}`);
+});
+
+
+
+
+
+
+
+
+
+
+
+
+walletRoutes
+const express = require('express');
+const router = express.Router();
+const walletController = require('../controllers/walletController'); // ✅ Đã đổi tên import
+
+// Route chính cho việc đăng nhập/kết nối ví và gộp điểm (Merge & Sync)
+router.post('/merge', walletController.mergeAndSync);
+
+// Route để lấy mã giới thiệu
+router.get('/code', walletController.getReferralCode);
+
+// Route placeholder cho việc cộng điểm task sau này
+router.post('/add-points', walletController.addPoints);
+
+module.exports = router;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+walletController
+const Wallet = require('../models/Wallet'); // ✅ Đã đổi tên import
+
+/**
+ * [POST] /api/user/merge
+ * Logic: Gộp điểm từ LocalStorage (guest_mp) vào DB, sau đó trả về tổng số dư.
+ */
+exports.mergeAndSync = async (req, res) => {
+    try {
+        const { wallet, guest_mp } = req.body;
+
+        if (!wallet) {
+            return res.status(400).json({ success: false, error: "Wallet address is required" });
+        }
+
+        // Đảm bảo điểm gửi lên là số dương hợp lệ
+        const pointsToMerge = (typeof guest_mp === 'number' && guest_mp > 0) ? Math.floor(guest_mp) : 0;
+        const normalizedWallet = wallet.toUpperCase(); // Chuẩn hóa 
+
+        // 1. Tìm Wallet trong DB
+        let walletDoc = await Wallet.findOne({ walletAddress: normalizedWallet });
+
+        if (!walletDoc) {
+            // TH1: User Mới Tinh -> Tạo Wallet mới
+            // Tạo mã mời ngẫu nhiên
+            const generatedRefCode = `INV-${wallet.slice(0, 5)}-${Math.floor(Math.random() * 9999) + 1000}`;
+
+            walletDoc = new Wallet({
+                walletAddress: normalizedWallet,
+                balance: pointsToMerge, // Điểm khởi đầu = điểm guest cày được
+                referralCode: generatedRefCode
+            });
+            await walletDoc.save();
+
+            console.log(`[MERGE] New Wallet created: ${wallet} | Points: ${pointsToMerge}`);
+
+        } else {
+            // TH2: User Cũ -> Cộng dồn điểm (Merge)
+            if (pointsToMerge > 0) {
+                walletDoc.balance += pointsToMerge;
+                await walletDoc.save();
+                console.log(`[MERGE] Wallet Synced: ${wallet} | Added: ${pointsToMerge}`);
+            } else {
+                // Wallet đã có ví, chỉ đang login lại
+                console.log(`[LOGIN] Wallet Logged in: ${wallet} | No points merged`);
+            }
+        }
+
+        // 2. Trả về kết quả cho Frontend
+        return res.status(200).json({
+            success: true,
+            wallet: walletDoc.walletAddress,
+            total_balance: walletDoc.balance, // Frontend dùng số này để cập nhật UI
+            referral_code: walletDoc.referralCode
+        });
+
+    } catch (error) {
+        console.error("Merge/Sync Error:", error);
+        return res.status(500).json({ success: false, error: "Internal Server Error during sync" });
+    }
+};
+
+/**
+ * [GET] /api/referral/code
+ * Logic: Lấy mã giới thiệu của user (dùng trong App.tsx)
+ */
+exports.getReferralCode = async (req, res) => {
+    try {
+        const { wallet } = req.query;
+        if (!wallet) return res.status(400).json({ success: false, error: "Wallet query is required" });
+
+        const walletDoc = await Wallet.findOne({ walletAddress: wallet.toUpperCase() }); // ✅ Đổi tên Model
+        
+        if (walletDoc) {
+            return res.json({ success: true, code: walletDoc.referralCode });
+        } else {
+            // Trường hợp user chưa login/merge lần nào, chỉ là truy vấn
+            return res.json({ success: true, code: null }); 
+        }
+    } catch (error) {
+        console.error("Referral Code Error:", error);
+        return res.status(500).json({ success: false, error: "Server error" });
+    }
+};
+
+/**
+ * [API Placeholder cho tương lai: Cộng điểm Task]
+ */
+exports.addPoints = async (req, res) => {
+    try {
+        const { wallet, amount } = req.body;
+        if (!wallet || !amount) return res.status(400).json({ success: false, error: "Invalid data" });
+        if (typeof amount !== 'number' || amount <= 0) return res.status(400).json({ success: false, error: "Invalid point amount" });
+
+        const walletDoc = await Wallet.findOneAndUpdate(
+            { walletAddress: wallet.toUpperCase() },
+            { $inc: { balance: amount } }, // Tăng điểm
+            { new: true } // Trả về document đã được update
+        );
+
+        if (!walletDoc) return res.status(404).json({ success: false, error: "Wallet not found" });
+
+        return res.json({ success: true, new_balance: walletDoc.balance });
+    } catch (error) {
+        return res.status(500).json({ success: false, error: "Server error during adding points" });
+    }
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// 🔹 Merge local user_balance → wallet khi connect ví
+  // useEffect(() => {
+  //   const mergeUserBalance = async () => {
+  //     if (walletAddress) {
+  //       const pending = Number(localStorage.getItem("user_balance") || 0);
+
+  //       if (pending > 0) {
+  //         try {
+  //           const res = await fetch(`https://moonnova-airdrop.onrender.com/api/wallet/add-points`, {
+  //             method: "POST",
+  //             headers: { "Content-Type": "application/json" },
+  //             body: JSON.stringify({ wallet: walletAddress, amount: pending })
+  //           });
+
+  //           const contentType = res.headers.get("content-type");
+  //           if (!contentType || !contentType.includes("application/json")) {
+  //             const text = await res.text();
+  //             console.error("Merge user_balance API did not return JSON:", text);
+  //             return;
+  //           }
+
+  //           const data = await res.json();
+  //           if (typeof data.total_balance === "number") {
+  //             setBalance(data.total_balance);
+  //           }
+
+  //           localStorage.setItem("user_balance", "0");
+  //         } catch (err) {
+  //           console.error("Failed to merge user_balance:", err);
+  //         }
+  //       }
+  //     }
+  //   };
+  //   mergeUserBalance();
+  //   }, [walletAddress]);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+import { useState, useEffect } from "react";
+import { getAdminStats } from "../api";
+
+interface HomeProps {
   balance: number;
   setBalance: React.Dispatch<React.SetStateAction<number>>;
+  currentMP: number;
+  setCurrentMP: React.Dispatch<React.SetStateAction<number>>;
   walletAddress: string | null;
-  setWalletAddress: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
-export default function Wallet({ balance, setBalance, walletAddress, setWalletAddress }: WalletProps) {
-  const wallet = useTonWallet();
+interface FloatingPoint {
+  id: number;
+  value: number;
+  x: number;
+  y: number;
+}
 
-  // 🌟 Fix TonConnectUI chỉ khởi tạo 1 lần duy nhất
-  const tonConnectUIRef = useRef<TonConnectUI | null>(null);
-  if (!tonConnectUIRef.current) {
-    tonConnectUIRef.current = new TonConnectUI({
-      manifestUrl: "https://moonnova-airdrop.onrender.com/tonconnect-manifest.json",
-    });
-  }
-  const tonConnectUI = tonConnectUIRef.current;
+export default function Home({ balance, setBalance, currentMP, setCurrentMP, walletAddress }: HomeProps) {
+  const [isTapping, setIsTapping] = useState(false);
+  const [floatingPoints, setFloatingPoints] = useState<FloatingPoint[]>([]);
+  const [isFarming, setIsFarming] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(0);
 
-  const [connecting, setConnecting] = useState(false);
-  const [loadingBalance, setLoadingBalance] = useState(false);
+  const [stats, setStats] = useState<any>(null);
+  const [loadingStats, setLoadingStats] = useState(true);
 
-  const pixelBox = {
-    background: "linear-gradient(180deg, #b26cff 0%, #5032ff 100%)",
-    border: "2px solid #000",
-    boxShadow: "3px 3px 0 #000",
-    imageRendering: "pixelated" as const,
-    clipPath: `polygon(
-      0px 14px,4px 14px,4px 10px,8px 10px,8px 6px,12px 6px,12px 0px,
-      calc(100% - 12px) 0px,calc(100% - 12px) 6px,calc(100% - 8px) 6px,
-      calc(100% - 8px) 10px,calc(100% - 4px) 10px,calc(100% - 4px) 14px,
-      100% 14px,100% calc(100% - 14px),calc(100% - 4px) calc(100% - 14px),
-      calc(100% - 4px) calc(100% - 10px),calc(100% - 8px) calc(100% - 10px),
-      calc(100% - 8px) calc(100% - 6px),calc(100% - 12px) calc(100% - 6px),
-      calc(100% - 12px) 100%,12px 100%,12px calc(100% - 6px),
-      8px calc(100% - 6px),8px calc(100% - 10px),4px calc(100% - 10px),
-      4px calc(100% - 14px),0px calc(100% - 14px)
-    )`,
+  // Load farming state
+  useEffect(() => {
+    const savedIsFarming = localStorage.getItem("isFarming");
+    const savedTimeLeft = localStorage.getItem("timeLeft");
+
+    if (savedIsFarming) setIsFarming(savedIsFarming === "true");
+    if (savedTimeLeft) setTimeLeft(Number(savedTimeLeft));
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("isFarming", isFarming.toString());
+  }, [isFarming]);
+
+  useEffect(() => {
+    localStorage.setItem("timeLeft", timeLeft.toString());
+  }, [timeLeft]);
+
+  // Fetch stats
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const data = await getAdminStats();
+        setStats(data.stats);
+      } catch (err) {
+        console.error("Lỗi khi tải thống kê backend:", err);
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+    fetchStats();
+  }, []);
+
+  const formatTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   };
 
-  const shortenAddress = (address: string) => address.slice(0, 6) + "..." + address.slice(-4);
+  const handleTap = async () => {
+    setIsTapping(true);
+    setTimeout(() => setIsTapping(false), 200);
+    const earned = Math.floor(Math.random() * 5) + 1;
 
-  // 🌟 Fix handleConnect để reset session trước khi connect
-  const handleConnect = async () => {
-    try {
-      setConnecting(true);
-      // 🔹 reset session cũ
-      await tonConnectUI.disconnect().catch(() => {});
-      const w = await tonConnectUI.connectWallet();
-      setWalletAddress(w.account.address); // đồng bộ lên App
-    } catch (err) {
-      console.error("Wallet connection failed:", err);
-      alert("Unable to connect wallet. Make sure you have Tonkeeper or Tonhub installed!");
-    } finally {
-      setConnecting(false);
+    setBalance(prev => prev + earned);
+    setCurrentMP(prev => prev + earned);
+
+    if (walletAddress) {
+      try {
+        const res = await fetch(`https://moonnova-airdrop.onrender.com/api/wallet/add-points`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wallet: walletAddress, amount: earned })
+        });
+
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          const text = await res.text();
+          console.error("Add points API did not return JSON:", text);
+          return;
+        }
+
+        await res.json();
+      } catch (err) {
+        console.error("Failed to add points to wallet:", err);
+      }
+    } else {
+      const ub = Number(localStorage.getItem("user_balance") || 0) + earned;
+      localStorage.setItem("user_balance", ub.toString());
     }
+
+    const angle = Math.random() * 2 * Math.PI;
+    const radius = 150 + Math.random() * 50;
+    const x = Math.cos(angle) * radius;
+    const y = Math.sin(angle) * radius;
+    const id = Date.now() + Math.random();
+    setFloatingPoints(prev => [...prev, { id, value: earned, x, y }]);
+    setTimeout(() => setFloatingPoints(prev => prev.filter(p => p.id !== id)), 1200);
   };
 
-  const handleDisconnect = async () => {
-    await tonConnectUI.disconnect();
-    setWalletAddress(null);
-    setBalance(0);
-  };
-
-  const fetchBalance = async (walletAddr: string) => {
-    try {
-      setLoadingBalance(true);
-      const res = await fetch(`https://moonnova-airdrop.onrender.com/api/user/balance?wallet=${walletAddr}`);
-      if (!res.ok) throw new Error(`Status ${res.status}`);
-      const data = await res.json();
-      setBalance(data.balance || 0);
-    } catch (err) {
-      console.error("Fetch balance failed:", err);
-      setBalance(0);
-    } finally {
-      setLoadingBalance(false);
-    }
+  const startFarming = () => {
+    setIsFarming(true);
+    setTimeLeft(3 * 60 * 60);
   };
 
   useEffect(() => {
+    if (!isFarming || timeLeft <= 0) return;
+
+    const timer = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isFarming, timeLeft]);
+
+  const claimReward = async () => {
+    const reward = 777;
+
+    setBalance(prev => prev + reward);
+    setCurrentMP(prev => prev + reward);
+    setIsFarming(false);
+    setTimeLeft(0);
+
     if (walletAddress) {
-      fetchBalance(walletAddress);
+      try {
+        const res = await fetch(`https://moonnova-airdrop.onrender.com/api/wallet/add-points`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wallet: walletAddress, amount: reward })
+        });
+
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          const text = await res.text();
+          console.error("Claim reward API did not return JSON:", text);
+          return;
+        }
+
+        await res.json();
+      } catch (err) {
+        console.error("Failed to claim reward:", err);
+      }
+    } else {
+      const ub = Number(localStorage.getItem("user_balance") || 0) + reward;
+      localStorage.setItem("user_balance", ub.toString());
     }
-  }, [walletAddress]);
+  };
 
+ 
   return (
-    <div className="flex flex-col items-center justify-center w-full min-h-screen px-4 py-8 bg-gradient-to-b from-gray-900 to-black text-white">
-      <div style={{ ...pixelBox, padding: "24px 20px", textAlign: "center", width: "100%", maxWidth: "400px" }}>
-        <h2 className="text-white font-bold text-lg mb-4">
-          💰 Total Balance:{" "}
-          <span className="ml-1 text-yellow-300">
-            {loadingBalance ? "Loading..." : balance.toLocaleString("en-US")} MP
+    <main className="fixed top-0 left-0 w-full h-screen flex flex-col justify-center items-center bg-black text-white overflow-hidden z-0">
+      <div className="absolute w-[280px] h-[280px] rounded-full bg-purple-500 blur-[120px] opacity-40 animate-pulse"></div>
+
+      <div className="relative flex flex-col items-center justify-center mt-20 mb-[20px] z-20">
+        <button
+          onClick={handleTap}
+          className={`relative w-[200px] h-[200px] rounded-full flex items-center justify-center text-[2.4rem] font-bold text-[#3B2F1C] bg-gradient-to-br from-[#FFFDF7] via-[#F5F0D0] to-[#EDE6B8] shadow-[0_0_60px_15px_rgba(255,245,200,0.25)] transition-all duration-200 ease-out ${isTapping ? "scale-95 shadow-[0_0_100px_25px_rgba(255,230,180,0.35)]" : "hover:scale-105"}`}
+        >
+          <span className="relative z-10 text-[2.4rem] drop-shadow-[0_0_10px_rgba(255,255,230,0.6)]">TAP</span>
+        </button>
+
+        {floatingPoints.map(point => (
+          <span
+            key={point.id}
+            className="absolute text-purple-300 font-semibold text-xl animate-fadeUp select-none pointer-events-none"
+            style={{ left: `calc(50% + ${point.x}px)`, top: `calc(50% + ${point.y}px)` }}
+          >
+            +{point.value}
           </span>
-        </h2>
-
-        {!walletAddress ? (
-          <button
-            onClick={handleConnect}
-            disabled={connecting}
-            style={{
-              ...pixelBox,
-              width: "100%",
-              padding: "12px 0",
-              fontWeight: 700,
-              color: "#000",
-              background: connecting
-                ? "linear-gradient(180deg, #ffe57f 0%, #d9b300 100%)"
-                : "linear-gradient(180deg, #FFD93D 0%, #E3B100 100%)",
-              cursor: "pointer",
-              opacity: connecting ? 0.8 : 1,
-            }}
-          >
-            {connecting ? "Connecting..." : "Connect Wallet"}
-          </button>
-        ) : (
-          <button
-            onClick={handleDisconnect}
-            style={{
-              ...pixelBox,
-              width: "100%",
-              padding: "12px 0",
-              fontWeight: 700,
-              color: "#fff",
-              background: "linear-gradient(180deg, #ff4e4e 0%, #a80000 100%)",
-              cursor: "pointer",
-            }}
-          >
-            Log Out ({shortenAddress(walletAddress)})
-          </button>
-        )}
-
-        {walletAddress && (
-          <p className="text-gray-200 text-sm mt-4">
-            Your wallet: <span className="text-blue-300 font-semibold">{shortenAddress(walletAddress)}</span>
-          </p>
-        )}
-
-        <p className="text-gray-300 text-xs mt-4 leading-snug">
-          MOONNOVA currently represents reward points in the system.
-          <br />
-          Tokens will be convertible when the mainnet launches.
-        </p>
+        ))}
       </div>
-    </div>
+
+      <div className="flex flex-col items-center mt-[20px] mb-12 z-10 pointer-events-auto w-full">
+        {!isFarming ? (
+          <button onClick={startFarming} className="w-2/3 h-[70px] rounded-full bg-gradient-to-b from-[#2b2b2b] via-[#1a1a1a] to-[#000000] text-[#ffffff] text-xl font-semibold tracking-wide shadow-[0_6px_18px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.05)] hover:brightness-125 hover:shadow-[0_8px_25px_rgba(255,255,255,0.15)] active:scale-95 active:shadow-[inset_0_3px_8px_rgba(0,0,0,0.25)] transition-all duration-300">FARMING</button>
+        ) : (
+          <button onClick={timeLeft === 0 ? claimReward : undefined} className="w-2/3 h-[70px] rounded-full bg-gradient-to-b from-[#3a3a3a] via-[#1f1f1f] to-[#0b0b0b] flex flex-col items-center justify-center text-[#ffffff] text-xl font-semibold shadow-[0_6px_18px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.05)] hover:brightness-110 active:scale-95 transition-all duration-300">
+            <span>{timeLeft > 0 ? "FARMING..." : "CLAIM REWARD"}</span>
+            {timeLeft > 0 && <span className="text-sm mt-1 font-mono">{formatTime(timeLeft)}</span>}
+          </button>
+        )}
+      </div>
+
+      {!loadingStats && stats && (
+        <div className="absolute bottom-6 text-sm text-gray-400 text-center">
+          <p>{stats.totalUsers}  {stats.totalTasks}</p>
+          <p>{stats.totalReferrals}  {stats.totalPoints}</p>
+        </div>
+      )}
+    </main>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+nháp của app
+useEffect(() => {
+  const prev = localStorage.getItem("prev_wallet");
+
+  if (walletAddress) {
+    // Khi connect ví → merge và xóa điểm guest
+    localStorage.removeItem("user_balance");
+    localStorage.setItem("prev_wallet", "connected");
+    console.log("⚡ Guest points cleared because wallet is connected!");
+  } else {
+    // ❗Chỉ reset khi TRƯỚC ĐÓ có ví → bây giờ mất ví → ĐÚNG LÀ disconnect
+    if (prev === "connected") {
+      localStorage.setItem("user_balance", "0");
+      setBalance(0);
+      console.log("⚡ Guest points reset because wallet is DISCONNECTED");
+    }
+
+    // Đánh dấu trạng thái guest
+    localStorage.setItem("prev_wallet", "");
+  }
+}, [walletAddress]);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ // ⭐ Disconnect logic — CHẶN reset khi tonWallet === null trong reload
+  // ⏳ Debounce disconnect — tránh reset oan khi TonConnect load lại ví
+useEffect(() => {
+  if (walletLoading) return;
+
+  let timeout: NodeJS.Timeout;
+
+  if (!walletAddress) {
+    // ⏳ Delay 600ms — nếu sau 600ms vẫn không có ví → mới coi là disconnect thật
+    timeout = setTimeout(() => {
+      const prev = localStorage.getItem("wallet_status");
+
+      if (prev === "connected") {
+        setBalance(0);
+        localStorage.setItem("user_balance", "0");
+        localStorage.removeItem("wallet_status");
+        console.log("🔓 Wallet Disconnected → Guest mode reset.");
+      }
+    }, 600);
+  } else {
+    // 🔒 Ví tồn tại → coi như connected
+    localStorage.setItem("wallet_status", "connected");
+    console.log("🔒 Wallet Connected.");
+  }
+
+  // Clear timeout nếu state thay đổi nhanh (reload)
+  return () => clearTimeout(timeout);
+
+}, [walletAddress, walletLoading]);

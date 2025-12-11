@@ -9,10 +9,11 @@ router.post('/merge', walletController.mergeAndSync);
 // Route để lấy mã giới thiệu
 router.get('/code', walletController.getReferralCode);
 
-// Route để lấy số dư ví
-router.get('/balance', walletController.getBalance);
+// Route để lấy số dư ví (Phương án A: dùng param walletAddress)
+router.get('/:walletAddress', walletController.getBalance);
 
 // Route để cộng điểm task
 router.post('/add-points', walletController.addPoints);
 
 export default router;
+

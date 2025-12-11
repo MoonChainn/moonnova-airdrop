@@ -1,3 +1,5 @@
+
+// wallet1 : 
 import React, { useState, useEffect, useRef } from "react";
 import { useTonWallet, useTonConnectUI } from "@tonconnect/ui-react";
 
@@ -13,74 +15,119 @@ interface WalletProps {
 export default function Wallet({ balance, setBalance, walletAddress, setWalletAddress }: WalletProps) {
   const wallet = useTonWallet();
   const [tonConnectUI] = useTonConnectUI();
-
   const [connecting, setConnecting] = useState(false);
   const [loadingBalance, setLoadingBalance] = useState(false);
-  
-  // Ref để ngăn chặn gọi API 2 lần do React StrictMode
   const isMerging = useRef(false);
 
-  // ⭐ LOGIC MỚI: Gộp điểm (Merge) từ Local lên Server, sau đó Xóa (Purge) Local
+  // ⭐ Merge local guest MP vào ví
   const syncAndMergeBalance = async (walletAddr: string) => {
-    // Nếu đang chạy merge rồi thì chặn lại
     if (isMerging.current) return;
     isMerging.current = true;
-    
+
     try {
       setLoadingBalance(true);
-      
-      // 1. Lấy điểm Guest hiện tại trong LocalStorage (Điểm chưa gộp)
       const guestMp = Number(localStorage.getItem("user_balance") || "0");
-      console.log(`🔄 Syncing Wallet: ${walletAddr} | Guest MP to merge: ${guestMp}`);
+      console.log(`🔄 Sync Wallet: ${walletAddr} | Guest MP: ${guestMp}`);
 
-      // 2. Gọi API Merge (Gộp) - Endpoint Backend cần xử lý việc cộng dồn này
-      const res = await fetch(`https://moonnova-airdrop.onrender.com/api/user/merge`, {
+      const res = await fetch(`https://moonnova-airdrop.onrender.com/api/wallet/merge`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          wallet: walletAddr,
-          guest_mp: guestMp 
-        })
+        body: JSON.stringify({ wallet: walletAddr,  guest_mp: guestMp })
       });
 
       if (!res.ok) throw new Error(`Merge failed: ${res.status}`);
 
-      const data = await res.json();
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await res.text();
+        console.error("Merge API did not return JSON:", text);
+        return;
+      }
 
-      // 3. Nếu Server trả về thành công -> Cập nhật UI bằng điểm từ Server
+      const data = await res.json();
       if (typeof data.total_balance === "number") {
         setWalletAddress(walletAddr);
         setBalance(data.total_balance);
 
-        // 4. ⭐ QUAN TRỌNG NHẤT: Xóa điểm Guest ở LocalStorage
-        // Chỉ xóa khi server đã xác nhận nhận được điểm (để tránh mất oan nếu lỗi mạng)
         if (guestMp > 0) {
           localStorage.setItem("user_balance", "0");
-          console.log("✅ Local guest points reset to 0 (Secure Purge)");
+          console.log("✅ Local guest MP reset.");
         }
       }
-
     } catch (err) {
       console.error("Sync error:", err);
-      // Nếu lỗi, vẫn hiển thị ví đã connect nhưng KHÔNG xóa localStorage
-      // để bảo toàn điểm cho user thử lại sau.
       setWalletAddress(walletAddr);
     } finally {
-      setLoadingBalance(false);
       isMerging.current = false;
+      setLoadingBalance(false);
     }
   };
 
-  // Tự động chạy logic Merge khi ví thay đổi
-  useEffect(() => {
-    if (wallet && wallet.account.address !== walletAddress) {
-      syncAndMergeBalance(wallet.account.address);
-    } else if (!wallet) {
-      // Nếu user ngắt kết nối từ extension
-      setWalletAddress(null);
-    }
-  }, [wallet]); 
+  // ⭐ Khi ví thay đổi (connect hoặc đổi ví)
+useEffect(() => {
 
+  // Khi kết nối ví mới hoàn toàn
+  if (wallet && wallet.account.address !== walletAddress) {
+    syncAndMergeBalance(wallet.account.address);
+    return;
+  }
+
+  // ⭐ Khi connect lại cùng ví → vẫn phải merge nếu guest > 0
+  if (wallet && wallet.account.address === walletAddress) {
+    const guestMp = Number(localStorage.getItem("user_balance") || "0");
+    if (guestMp > 0) {
+      console.log("⭐ Reconnect same wallet → merging local MP...");
+      syncAndMergeBalance(wallet.account.address);
+    }
+    return;
+  }
+  
+}, [wallet]);
+
+  // ⭐ Fetch balance từ server khi đã có ví
+  useEffect(() => {
+    if (!walletAddress) return;
+
+    const fetchBalance = async () => {
+      try {
+        setLoadingBalance(true);
+
+        const res = await fetch(
+          `https://moonnova-airdrop.onrender.com/api/wallet/balance?wallet=${walletAddress}`
+        );
+
+        if (!res.headers.get("content-type")?.includes("application/json")) {
+  const text = await res.text();
+  console.error("Balance API did not return JSON:", text);
+  return;
+}
+
+
+        if (!res.ok) throw new Error("Fetch wallet balance failed");
+
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          const text = await res.text();
+          console.error("Balance API did not return JSON:", text);
+          return;
+        }
+
+        const data = await res.json();
+
+        if (typeof data.total_balance === "number") {
+          setBalance(data.total_balance);
+        }
+      } catch (err) {
+        console.error("Balance fetch error:", err);
+      } finally {
+        setLoadingBalance(false);
+      }
+    };
+
+    fetchBalance();
+  }, [walletAddress]);
+
+  // ⭐ UI helpers
   const pixelBox = {
     background: "linear-gradient(180deg, #b26cff 0%, #5032ff 100%)",
     border: "2px solid #000",
@@ -107,7 +154,7 @@ export default function Wallet({ balance, setBalance, walletAddress, setWalletAd
       setConnecting(true);
       await tonConnectUI.openModal();
     } catch (err) {
-      console.error("Wallet connection failed/cancelled:", err);
+      console.error("Wallet connection failed:", err);
     } finally {
       setConnecting(false);
     }
@@ -115,12 +162,14 @@ export default function Wallet({ balance, setBalance, walletAddress, setWalletAd
 
   const handleDisconnect = async () => {
     await tonConnectUI.disconnect();
+
+    // 🔥 Reset clean cho guest mode
+    localStorage.setItem("force_disconnect", "1");
+
     setWalletAddress(null);
-    
-    // Khi thoát ví: Load lại điểm từ localStorage
-    // (Lúc này đã về 0 do logic Merge ở trên -> Đúng logic bảo mật)
-    const localMp = Number(localStorage.getItem("user_balance") || "0");
-    setBalance(localMp);
+
+    const guest = Number(localStorage.getItem("user_balance") || "0");
+    setBalance(guest);
   };
 
   return (
