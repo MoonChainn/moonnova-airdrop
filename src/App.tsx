@@ -105,12 +105,12 @@ export default function App() {
     const loadBalance = async () => {
       try {
         const res = await fetch(
-  `https://moonnova-airdrop.onrender.com/api/wallet/balance?wallet=${walletAddress}`
+  `https://moonnova-airdrop.onrender.com/api/wallet/${walletAddress}`
 );
 const data = await res.json();
 
-        if (data?.balance !== undefined) {
-          setBalance(data.balance);
+        if (data?.total_balance !== undefined) {
+          setBalance(data.total_balance);
         }
       } catch {}
     };
@@ -218,6 +218,3 @@ useEffect(() => {
     </TonConnectUIProvider>
   );
 }
-
-
-

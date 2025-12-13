@@ -16,4 +16,3 @@ router.get('/:walletAddress', walletController.getBalance);
 router.post('/add-points', walletController.addPoints);
 
 export default router;
-

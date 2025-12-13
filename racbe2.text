@@ -1,45 +1,3 @@
-//wallet router 
-import express from 'express';
-import walletController from '../controllers/walletController.js'; // ✅ ĐÚNG NHẤT
-
-const router = express.Router();
-
-// Route chính cho việc đăng nhập/kết nối ví và gộp điểm (Merge & Sync)
-router.post('/merge', walletController.mergeAndSync);
-
-// Route để lấy mã giới thiệu
-router.get('/code', walletController.getReferralCode);
-
-// Route để lấy số dư ví (Phương án A: dùng param walletAddress)
-router.get('/:walletAddress', walletController.getBalance);
-
-// Route để cộng điểm task
-router.post('/add-points', walletController.addPoints);
-
-export default router;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // src/index.js
 import path from "path";
 import express from "express";
@@ -49,8 +7,8 @@ import { fileURLToPath } from "url";
 import connectDB from "./db.js";
 
 // 🔹 Import ALL routes
-import userRoutes from "./routes/userRoutes.js";          // Các API user cũ
-import walletRoutes from "./routes/walletRoutes.js";      // Wallet login / merge / referral / add-points
+import userRoutes from "./routes/userRoutes.js";
+import walletRoutes from "./routes/walletRoutes.js";
 import taskRoutes from "./routes/taskRoutes.js";
 import referralRoutes from "./routes/referralRoutes.js";
 import telegramRoutes from "./routes/telegramRoutes.js";
@@ -59,7 +17,7 @@ import pointsRoutes from "./routes/pointsRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 
 // ---------------------------------------------
-// 🔧 Config environment & dirname
+// 🔧 Config environment
 // ---------------------------------------------
 dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
@@ -75,18 +33,24 @@ connectDB();
 // ---------------------------------------------
 const app = express();
 
-// 🧩 Middleware
+// 🧩 Middleware — phải đặt TRƯỚC ROUTES
 app.use(cors());
 app.use(express.json());
+
+// Debug body (đúng vị trí)
+app.use((req, res, next) => {
+  console.log("Incoming body:", req.body);
+  next();
+});
 
 // 📁 Static folder for uploads
 app.use("/uploads", express.static(path.join(path.resolve(), "uploads")));
 
 // ---------------------------------------------
-// 🧠 ALL API Routes
+// 🧠 API ROUTES
 // ---------------------------------------------
-app.use("/api/users", userRoutes);       // User routes cũ
-app.use("/api/wallet", walletRoutes);    // Wallet routes riêng
+app.use("/api/users", userRoutes);
+app.use("/api/wallet", walletRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/referrals", referralRoutes);
 app.use("/api/telegram", telegramRoutes);
@@ -95,7 +59,7 @@ app.use("/api/points", pointsRoutes);
 app.use("/api/admin", adminRoutes);
 
 // ---------------------------------------------
-// 🩺 Server check routes
+// 🩺 Health check
 // ---------------------------------------------
 app.get("/api", (req, res) => {
   res.send("🚀 Server is running and connected to MongoDB!");
@@ -110,18 +74,20 @@ app.get("/api/health", (req, res) => {
 });
 
 // ---------------------------------------------
-// 🌐 FRONTEND SERVE (Vite build inside backend/src/dist)
+// 🌐 FRONTEND SERVE (Vite build inside ./dist)
 // ---------------------------------------------
 app.use(express.static(path.join(__dirname, "./dist")));
 
-// TonConnect manifest special route
-app.get('/tonconnect-manifest.json', (req, res) => {
+app.get("/tonconnect-manifest.json", (req, res) => {
   res.sendFile(path.join(__dirname, "dist", "tonconnect-manifest.json"), {
-    headers: { 'Content-Type': 'application/json' }
+    headers: { "Content-Type": "application/json" },
   });
 });
 
-// Fallback for SPA
+
+// ---------------------------------------------
+// 🔥 SPA Fallback — PHẢI ĐỨNG CUỐI
+// ---------------------------------------------
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "./dist", "index.html"));
 });
@@ -153,11 +119,27 @@ app.listen(PORT, () => {
 
 
 
-app.use(express.json()); // middleware parse JSON
-app.use((req, res, next) => {
-  console.log("Incoming body:", req.body); // log body gửi lên
-  next();
-});
+
+
+//router
+import express from 'express';
+import walletController from '../controllers/walletController.js'; // ✅ ĐÚNG NHẤT
+
+const router = express.Router();
+
+// Route chính cho việc đăng nhập/kết nối ví và gộp điểm (Merge & Sync)
+router.post('/merge', walletController.mergeAndSync);
+
+// Route để lấy mã giới thiệu
+router.get('/code', walletController.getReferralCode);
+
+// Route để lấy số dư ví (Phương án A: dùng param walletAddress)
+router.get('/balance/:walletAddress', walletController.getBalance);
+
+// Route để cộng điểm task
+router.post('/add-points', walletController.addPoints);
+
+export default router;
 
 
 
@@ -171,7 +153,16 @@ app.use((req, res, next) => {
 
 
 
-//walletController
+
+
+
+
+
+
+
+
+
+// controllers
 import * as WalletModule from '../models/Wallet.js';
 const Wallet = WalletModule.default || WalletModule.Wallet;
 
@@ -254,11 +245,11 @@ async function getReferralCode(req, res) {
 }
 
 // ---------------------------
-// GET BALANCE (sửa dùng param walletAddress)
+// GET BALANCE (dùng param walletAddress)
 // ---------------------------
 async function getBalance(req, res) {
     try {
-        const { walletAddress } = req.params; // <-- lấy từ param path
+        const { walletAddress } = req.params;
 
         if (!walletAddress) {
             return res.status(400).json({ success: false, error: "Wallet address is required" });
@@ -274,7 +265,7 @@ async function getBalance(req, res) {
 
         return res.json({
             success: true,
-            total_balance: walletDoc.balance // <-- giữ key là total_balance cho FE
+            total_balance: walletDoc.balance
         });
 
     } catch (error) {
@@ -315,23 +306,9 @@ async function addPoints(req, res) {
     }
 }
 
-// ---------------------------
-// EXPORT DEFAULT
-// ---------------------------
 export default {
     mergeAndSync,
     getReferralCode,
     getBalance,
     addPoints
 };
-
-
-
-
-
-
-
-
-
-
-
