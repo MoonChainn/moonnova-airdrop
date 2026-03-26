@@ -19,7 +19,11 @@ const taskSchema = new mongoose.Schema({
 });
 
 // index để tìm nhanh theo key
+<<<<<<< HEAD
 // taskSchema.index({ key: 1 });
+=======
+taskSchema.index({ key: 1 });
+>>>>>>> f16063f597c3b08d1cc9737ec7d0908b59fd4acb
 
 const Task = mongoose.model("Task", taskSchema);
 

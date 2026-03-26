@@ -3,6 +3,7 @@
 import path from "path";
 import express from "express";
 import cors from "cors";
+<<<<<<< HEAD
 import dotenv from "dotenv";``
 import { fileURLToPath } from "url";
 import connectDB from "./db.js";
@@ -11,6 +12,12 @@ import connectDB from "./db.js";
 
 
 
+=======
+import dotenv from "dotenv";
+import { fileURLToPath } from "url";
+import connectDB from "./db.js";
+
+>>>>>>> f16063f597c3b08d1cc9737ec7d0908b59fd4acb
 // 🔹 Import ALL routes
 import userRoutes from "./routes/userRoutes.js";          // Các API user cũ
 import walletRoutes from "./routes/walletRoutes.js";      // Wallet login / merge / referral / add-points
